@@ -1,4 +1,5 @@
 library(shiny)
+library(shinyjs)
 library(bslib)
 library(httr2)
 library(jsonlite)
@@ -98,6 +99,7 @@ themes <- list(
 ui <- page_sidebar(
   title = "Collection Configurator",
   theme = bs_theme(preset = "shiny"),
+  shinyjs::useShinyjs(),
 
   sidebar = sidebar(
     width = 380,
@@ -157,6 +159,7 @@ ui <- page_sidebar(
 
   # Main content area
   navset_card_tab(
+    id = "main_tabs",
     title = "Collection Preview",
 
     nav_panel("Search Results",
@@ -214,6 +217,12 @@ server <- function(input, output, session) {
   # Search content
   observeEvent(input$search_btn, {
     req(input$search_query)
+    shinyjs::disable("search_btn")
+    shinyjs::html("search_btn", "Searching...")
+    on.exit({
+      shinyjs::enable("search_btn")
+      shinyjs::html("search_btn", "Search")
+    })
     results <- search_content(input$search_query)
     search_results(results)
   })
@@ -332,6 +341,8 @@ server <- function(input, output, session) {
   # Save and render
   observeEvent(input$save_config, {
     req(input$dashboard_guid)
+    shinyjs::disable("save_config")
+    shinyjs::html("save_config", "Saving...")
     guid <- trimws(input$dashboard_guid)
 
     # Build config
@@ -361,6 +372,7 @@ server <- function(input, output, session) {
       env_payload <- list(list(name = "COLLECTION_CONFIG", value = as.character(config_json)))
       set_content_env(guid, env_payload)
 
+      shinyjs::html("save_config", "Rendering...")
       status_message("Configuration saved. Triggering render...")
 
       # Trigger re-render
@@ -378,6 +390,11 @@ server <- function(input, output, session) {
     }, error = function(e) {
       status_message(paste("Error:", e$message))
     })
+
+    # Re-enable button and switch to Status tab
+    shinyjs::enable("save_config")
+    shinyjs::html("save_config", "Save & Render")
+    nav_select("main_tabs", "Status")
   })
 
   # Status output
