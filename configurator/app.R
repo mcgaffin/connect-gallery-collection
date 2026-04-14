@@ -17,14 +17,16 @@ api_headers <- function(req) {
 
 search_content <- function(query) {
   tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/content")) |>
+    resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
       api_headers() |>
       req_url_query(
-        search = query,
-        include = "owner"
+        q = paste("published:true", query),
+        include = "owner",
+        page_size = 20
       ) |>
       req_perform()
-    resp_body_json(resp)
+    result <- resp_body_json(resp)
+    result$results %||% list()
   }, error = function(e) {
     message("Search error: ", e$message)
     list()
@@ -51,15 +53,6 @@ get_content <- function(guid) {
       req_perform()
     resp_body_json(resp)
   }, error = function(e) NULL)
-}
-
-get_content_env <- function(guid) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/content/", guid, "/environment")) |>
-      api_headers() |>
-      req_perform()
-    resp_body_json(resp)
-  }, error = function(e) list())
 }
 
 set_content_env <- function(guid, env_vars) {
@@ -237,30 +230,15 @@ server <- function(input, output, session) {
       updateTextInput(session, "collection_description", value = content$description %||% "")
     }
 
-    # Fetch env vars
-    env <- get_content_env(guid)
-    for (e in env) {
-      if (e$name == "COLLECTION_CONFIG") {
-        config <- tryCatch(fromJSON(e$value), error = function(err) list())
-        if (!is.null(config$intro_markdown)) {
-          updateTextAreaInput(session, "collection_intro", value = config$intro_markdown)
-        }
-        if (!is.null(config$theme)) {
-          updateRadioButtons(session, "theme", selected = config$theme)
-        }
-        if (!is.null(config$source_type)) {
-          updateRadioButtons(session, "source_type", selected = config$source_type)
-        }
-        if (!is.null(config$source_tag)) {
-          updateSelectInput(session, "tag_select", selected = config$source_tag)
-        }
-        if (!is.null(config$guids)) {
-          selected_guids(config$guids)
-        }
-        status_message("Loaded existing configuration.")
-        break
-      }
-    }
+    # Note: the environment variable API only returns names, not values,
+    # so we cannot read back the full COLLECTION_CONFIG. The title and
+    # description are loaded from the content item above. Other settings
+    # (theme, intro, items) must be re-entered when editing.
+    status_message(paste0(
+      "Loaded title and description from dashboard. ",
+      "Other settings (theme, intro, items) must be re-configured. ",
+      "A future version will support full config round-tripping."
+    ))
   })
 
   # Render search results with select buttons
