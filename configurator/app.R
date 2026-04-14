@@ -3,6 +3,8 @@ library(shinyjs)
 library(bslib)
 library(httr2)
 library(jsonlite)
+library(pins)
+library(connectapi)
 
 # Connect API helpers
 connect_server <- Sys.getenv("CONNECT_SERVER", "http://localhost:3939")
@@ -56,12 +58,27 @@ get_content <- function(guid) {
   }, error = function(e) NULL)
 }
 
-set_content_env <- function(guid, env_vars) {
-  request(paste0(connect_server, "/__api__/v1/content/", guid, "/environment")) |>
-    api_headers() |>
-    req_method("PATCH") |>
-    req_body_json(env_vars) |>
-    req_perform()
+# Pin board for storing collection configs
+get_pin_board <- function() {
+  board_connect()
+}
+
+pin_name_for <- function(guid) {
+  paste0("collection_config_", guid)
+}
+
+read_collection_pin <- function(guid) {
+  tryCatch({
+    board <- get_pin_board()
+    pin_read(board, pin_name_for(guid))
+  }, error = function(e) NULL)
+}
+
+write_collection_pin <- function(guid, config) {
+  board <- get_pin_board()
+  pin_write(board, config, name = pin_name_for(guid),
+    type = "json",
+    title = paste("Collection config:", config$title %||% guid))
 }
 
 update_content <- function(guid, title, description) {
@@ -232,22 +249,35 @@ server <- function(input, output, session) {
     req(input$dashboard_guid)
     guid <- trimws(input$dashboard_guid)
 
-    # Fetch content info
+    # Fetch content info for title/description
     content <- get_content(guid)
     if (!is.null(content)) {
       updateTextInput(session, "collection_title", value = content$title %||% "")
       updateTextInput(session, "collection_description", value = content$description %||% "")
     }
 
-    # Note: the environment variable API only returns names, not values,
-    # so we cannot read back the full COLLECTION_CONFIG. The title and
-    # description are loaded from the content item above. Other settings
-    # (theme, intro, items) must be re-entered when editing.
-    status_message(paste0(
-      "Loaded title and description from dashboard. ",
-      "Other settings (theme, intro, items) must be re-configured. ",
-      "A future version will support full config round-tripping."
-    ))
+    # Read full config from pin
+    config <- read_collection_pin(guid)
+    if (!is.null(config)) {
+      if (!is.null(config$intro_markdown)) {
+        updateTextAreaInput(session, "collection_intro", value = config$intro_markdown)
+      }
+      if (!is.null(config$theme)) {
+        updateRadioButtons(session, "theme", selected = config$theme)
+      }
+      if (!is.null(config$source_type)) {
+        updateRadioButtons(session, "source_type", selected = config$source_type)
+      }
+      if (!is.null(config$source_tag)) {
+        updateSelectInput(session, "tag_select", selected = config$source_tag)
+      }
+      if (!is.null(config$guids)) {
+        selected_guids(config$guids)
+      }
+      status_message("Loaded existing configuration from pin.")
+    } else {
+      status_message("No existing pin config found. Title and description loaded from dashboard.")
+    }
   })
 
   # Render search results with select buttons
@@ -360,17 +390,14 @@ server <- function(input, output, session) {
       config$guids <- selected_guids()
     }
 
-    config_json <- toJSON(config, auto_unbox = TRUE)
-
     status_message("Saving configuration...")
 
     tryCatch({
       # Update title and description on the content item
       update_content(guid, input$collection_title, input$collection_description)
 
-      # Set the environment variable
-      env_payload <- list(list(name = "COLLECTION_CONFIG", value = as.character(config_json)))
-      set_content_env(guid, env_payload)
+      # Write config to pin
+      write_collection_pin(guid, config)
 
       shinyjs::html("save_config", "Rendering...")
       status_message("Configuration saved. Triggering render...")

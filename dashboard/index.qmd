@@ -14,13 +14,23 @@ format:
 
 library(httr2)
 library(jsonlite)
+library(pins)
+library(connectapi)
 
-# Read collection config from environment variable
-config_json <- Sys.getenv("COLLECTION_CONFIG", "{}")
-config <- tryCatch(
-  fromJSON(config_json),
-  error = function(e) list()
-)
+# Connect API setup
+connect_server <- Sys.getenv("CONNECT_SERVER", "")
+connect_api_key <- Sys.getenv("CONNECT_API_KEY", "")
+content_guid <- Sys.getenv("CONNECT_CONTENT_GUID", "")
+
+# Read collection config from pin
+pin_name <- paste0("collection_config_", content_guid)
+config <- tryCatch({
+  board <- board_connect()
+  pin_read(board, pin_name)
+}, error = function(e) {
+  message("No collection config pin found: ", e$message)
+  list()
+})
 
 # Defaults
 collection_title <- config$title %||% "Content Collection"
@@ -30,10 +40,6 @@ collection_theme <- config$theme %||% "minimal"
 collection_source_type <- config$source_type %||% "manual"
 collection_source_tag <- config$source_tag %||% ""
 collection_guids <- config$guids %||% character(0)
-
-# Connect API setup
-connect_server <- Sys.getenv("CONNECT_SERVER", "")
-connect_api_key <- Sys.getenv("CONNECT_API_KEY", "")
 
 fetch_content <- function(guid) {
   tryCatch({
