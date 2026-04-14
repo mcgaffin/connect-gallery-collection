@@ -50,12 +50,17 @@ fetch_content <- function(guid) {
 
 fetch_content_by_tag <- function(tag_name) {
   tryCatch({
-    # Search for content with the tag
-    resp <- request(paste0(connect_server, "/__api__/v1/content")) |>
+    # Use the search endpoint with tag filter
+    resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
       req_headers(Authorization = paste("Key", connect_api_key)) |>
-      req_url_query(include = "owner", tag = tag_name) |>
+      req_url_query(
+        q = paste0("published:true tag:", tag_name),
+        include = "owner",
+        page_size = 100
+      ) |>
       req_perform()
-    resp_body_json(resp)
+    result <- resp_body_json(resp)
+    result$results %||% list()
   }, error = function(e) {
     list()
   })
