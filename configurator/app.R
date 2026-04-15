@@ -102,6 +102,24 @@ render_content <- function(guid) {
   })
 }
 
+fetch_collection_dashboards <- function() {
+  tryCatch({
+    resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
+      api_headers() |>
+      req_url_query(
+        q = "published:true tag:_collection_",
+        include = "owner",
+        page_size = 100
+      ) |>
+      req_perform()
+    result <- resp_body_json(resp)
+    result$results %||% list()
+  }, error = function(e) {
+    message("Fetch collections error: ", e$message)
+    list()
+  })
+}
+
 # Theme definitions
 themes <- list(
   "warm" = list(label = "Warm", bg = "#fffbeb", accent = "#d97706"),
@@ -123,10 +141,10 @@ ui <- page_sidebar(
     title = "Configuration",
 
     # Target dashboard
-    textInput("dashboard_guid", "Dashboard GUID",
-      placeholder = "Paste the GUID of your collection dashboard"
+    selectizeInput("dashboard_guid", "Collection Dashboard",
+      choices = c("Loading collections..." = ""),
+      options = list(placeholder = "Select a collection dashboard...")
     ),
-    actionButton("load_existing", "Load Existing Config", class = "btn-sm btn-outline-secondary mb-3"),
 
     hr(),
 
@@ -213,8 +231,19 @@ server <- function(input, output, session) {
   # Reactive values
   selected_guids <- reactiveVal(character(0))
   search_results <- reactiveVal(list())
-  status_message <- reactiveVal("Ready. Enter a dashboard GUID and configure your collection.")
+  status_message <- reactiveVal("Ready. Select a collection dashboard to configure.")
   all_tags <- reactiveVal(list())
+
+  # Load collection dashboards on startup
+  observe({
+    dashboards <- fetch_collection_dashboards()
+    choices <- c("Select a collection..." = "")
+    for (d in dashboards) {
+      label <- d$title %||% d$name %||% d$guid
+      choices[label] <- d$guid
+    }
+    updateSelectizeInput(session, "dashboard_guid", choices = choices)
+  })
 
   # Load tags on startup
   observe({
@@ -244,10 +273,11 @@ server <- function(input, output, session) {
     search_results(results)
   })
 
-  # Load existing config
-  observeEvent(input$load_existing, {
+  # Load config when a dashboard is selected
+  observeEvent(input$dashboard_guid, {
     req(input$dashboard_guid)
     guid <- trimws(input$dashboard_guid)
+    if (nchar(guid) == 0) return()
 
     # Fetch content info for title/description
     content <- get_content(guid)
