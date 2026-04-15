@@ -140,11 +140,48 @@ ui <- page_sidebar(
     width = 380,
     title = "Configuration",
 
+    # Compact spacing CSS
+    tags$style("
+      .sidebar .form-group { margin-bottom: 0.5rem; }
+      .sidebar hr { margin: 0.5rem 0; }
+      .sidebar .control-label { margin-bottom: 0.25rem; }
+
+      /* Clean up tab styling */
+      .bslib-card > .card-header > .nav-tabs .nav-link {
+        font-size: 0.875rem;
+      }
+
+      /* Loading overlay */
+      #sidebar-config-wrapper { position: relative; }
+      #sidebar-loading-overlay {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255, 255, 255, 0.85);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 3rem;
+        z-index: 10;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        color: #666;
+      }
+    "),
+
     # Target dashboard
     selectizeInput("dashboard_guid", "Collection Dashboard",
       choices = c("Loading collections..." = ""),
       options = list(placeholder = "Select a collection dashboard...")
     ),
+
+    # Config fields wrapped with loading overlay
+    tags$div(id = "sidebar-config-wrapper",
+      shinyjs::hidden(
+        tags$div(id = "sidebar-loading-overlay",
+          tags$span(class = "spinner-border spinner-border-sm me-2"),
+          "Loading configuration..."
+        )
+      ),
 
     hr(),
 
@@ -152,18 +189,14 @@ ui <- page_sidebar(
     textInput("collection_title", "Title", placeholder = "My Collection"),
     textInput("collection_description", "Description", placeholder = "A short description"),
     textAreaInput("collection_intro", "Introduction (Markdown)",
-      rows = 4, placeholder = "Write an intro. Markdown supported."
+      rows = 3, placeholder = "Write an intro. Markdown supported."
     ),
 
     hr(),
 
     # Theme
     tags$label("Theme", class = "control-label"),
-    radioButtons("theme", NULL,
-      choices = setNames(names(themes), sapply(themes, function(t) t$label)),
-      selected = "minimal",
-      inline = TRUE
-    ),
+    uiOutput("theme_picker"),
 
     hr(),
 
@@ -183,19 +216,19 @@ ui <- page_sidebar(
     conditionalPanel(
       condition = "input.source_type == 'manual'",
       textInput("search_query", "Search Content", placeholder = "Search by title..."),
-      actionButton("search_btn", "Search", class = "btn-sm btn-primary mb-2")
+      actionButton("search_btn", "Search", class = "btn-sm btn-primary mb-1")
     ),
 
     hr(),
 
     # Save
     actionButton("save_config", "Save & Render", class = "btn-primary btn-lg w-100")
+    ) # close sidebar-config-wrapper
   ),
 
   # Main content area
   navset_card_tab(
     id = "main_tabs",
-    title = "Collection Preview",
 
     nav_panel("Search Results",
       conditionalPanel(
@@ -206,8 +239,9 @@ ui <- page_sidebar(
       ),
       conditionalPanel(
         condition = "input.source_type == 'tag'",
-        tags$p(class = "text-muted mt-3",
-          "Content will be dynamically included based on the selected tag."
+        tags$div(
+          style = "display: flex; align-items: center; justify-content: center; min-height: 300px; padding-bottom: 80px;",
+          tags$p(class = "text-muted", "Content will be dynamically included based on the selected tag.")
         )
       )
     ),
@@ -215,12 +249,6 @@ ui <- page_sidebar(
     nav_panel("Selected Items",
       tags$div(class = "mt-3",
         uiOutput("selected_items_ui")
-      )
-    ),
-
-    nav_panel("Status",
-      tags$div(class = "mt-3",
-        uiOutput("status_ui")
       )
     )
   )
@@ -231,7 +259,10 @@ server <- function(input, output, session) {
   # Reactive values
   selected_guids <- reactiveVal(character(0))
   search_results <- reactiveVal(list())
-  status_message <- reactiveVal("Ready. Select a collection dashboard to configure.")
+  selected_theme <- reactiveVal("minimal")
+  notify <- function(msg, type = "default") {
+    showNotification(msg, type = type, duration = if (type == "error") NULL else 5)
+  }
   all_tags <- reactiveVal(list())
 
   # Load collection dashboards on startup
@@ -260,6 +291,39 @@ server <- function(input, output, session) {
     updateSelectInput(session, "tag_select", choices = choices)
   })
 
+  # Theme picker grid
+  output$theme_picker <- renderUI({
+    current <- selected_theme()
+    theme_buttons <- lapply(names(themes), function(id) {
+      t <- themes[[id]]
+      is_selected <- id == current
+      actionButton(
+        paste0("theme_", id),
+        t$label,
+        class = "btn btn-sm w-100",
+        style = sprintf(
+          "background: %s; color: %s; border: 2px solid %s; font-weight: 500; %s",
+          t$bg, t$accent,
+          if (is_selected) t$accent else "#dee2e6",
+          if (is_selected) sprintf("box-shadow: 0 0 0 1px %s, 0 0 0 4px %s;", t$accent, t$bg) else ""
+        )
+      )
+    })
+    tags$div(
+      style = "display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;",
+      theme_buttons
+    )
+  })
+
+  # Theme button click handlers
+  observe({
+    lapply(names(themes), function(id) {
+      observeEvent(input[[paste0("theme_", id)]], {
+        selected_theme(id)
+      }, ignoreInit = TRUE)
+    })
+  })
+
   # Search content
   observeEvent(input$search_btn, {
     req(input$search_query)
@@ -279,6 +343,9 @@ server <- function(input, output, session) {
     guid <- trimws(input$dashboard_guid)
     if (nchar(guid) == 0) return()
 
+    shinyjs::show("sidebar-loading-overlay")
+    on.exit(shinyjs::hide("sidebar-loading-overlay"))
+
     # Fetch content info for title/description
     content <- get_content(guid)
     if (!is.null(content)) {
@@ -293,7 +360,7 @@ server <- function(input, output, session) {
         updateTextAreaInput(session, "collection_intro", value = config$intro_markdown)
       }
       if (!is.null(config$theme)) {
-        updateRadioButtons(session, "theme", selected = config$theme)
+        selected_theme(config$theme)
       }
       if (!is.null(config$source_type)) {
         updateRadioButtons(session, "source_type", selected = config$source_type)
@@ -304,9 +371,9 @@ server <- function(input, output, session) {
       if (!is.null(config$guids)) {
         selected_guids(config$guids)
       }
-      status_message("Loaded existing configuration from pin.")
+      notify("Loaded existing configuration.", type = "message")
     } else {
-      status_message("No existing pin config found. Title and description loaded from dashboard.")
+      notify("No existing config found. Title and description loaded from dashboard.", type = "warning")
     }
   })
 
@@ -314,7 +381,10 @@ server <- function(input, output, session) {
   output$search_results_ui <- renderUI({
     results <- search_results()
     if (length(results) == 0) {
-      return(tags$p(class = "text-muted", "No results yet. Search for content above."))
+      return(tags$div(
+        style = "display: flex; align-items: center; justify-content: center; min-height: 300px; padding-bottom: 80px;",
+        tags$p(class = "text-muted", "No content matches your search.")
+      ))
     }
 
     current_selected <- selected_guids()
@@ -374,7 +444,10 @@ server <- function(input, output, session) {
   output$selected_items_ui <- renderUI({
     guids <- selected_guids()
     if (length(guids) == 0) {
-      return(tags$p(class = "text-muted", "No items selected yet."))
+      return(tags$div(
+        style = "display: flex; align-items: center; justify-content: center; min-height: 300px; padding-bottom: 80px;",
+        tags$p(class = "text-muted", "No items selected yet.")
+      ))
     }
 
     item_cards <- lapply(guids, function(guid) {
@@ -410,7 +483,7 @@ server <- function(input, output, session) {
       title = input$collection_title,
       description = input$collection_description,
       intro_markdown = input$collection_intro,
-      theme = input$theme,
+      theme = selected_theme(),
       source_type = input$source_type
     )
 
@@ -420,8 +493,6 @@ server <- function(input, output, session) {
       config$guids <- selected_guids()
     }
 
-    status_message("Saving configuration...")
-
     tryCatch({
       # Update title and description on the content item
       update_content(guid, input$collection_title, input$collection_description)
@@ -430,34 +501,35 @@ server <- function(input, output, session) {
       write_collection_pin(guid, config)
 
       shinyjs::html("save_config", "Rendering...")
-      status_message("Configuration saved. Triggering render...")
 
       # Trigger re-render
       success <- render_content(guid)
 
       if (success) {
         dashboard_url <- paste0(connect_server, "/content/", guid, "/")
-        status_message(paste0(
-          "Collection updated and rendering! ",
-          "View it at: ", dashboard_url
-        ))
+        showNotification(
+          ui = tags$div(
+            tags$p("Your collection is rendering. Once complete, refresh the page to see the latest version."),
+            tags$a(
+              href = dashboard_url,
+              target = "_blank",
+              class = "btn btn-sm btn-outline-primary mt-2",
+              "Open Collection"
+            )
+          ),
+          type = "message",
+          duration = 10
+        )
       } else {
-        status_message("Configuration saved but render could not be triggered. You may need to manually re-render the dashboard.")
+        notify("Configuration saved but render could not be triggered. You may need to manually re-render the dashboard.", type = "warning")
       }
     }, error = function(e) {
-      status_message(paste("Error:", e$message))
+      notify(paste("Error:", e$message), type = "error")
     })
 
     # Re-enable button and switch to Status tab
     shinyjs::enable("save_config")
     shinyjs::html("save_config", "Save & Render")
-    nav_select("main_tabs", "Status")
-  })
-
-  # Status output
-  output$status_ui <- renderUI({
-    msg <- status_message()
-    tags$div(class = "alert alert-info", msg)
   })
 }
 
