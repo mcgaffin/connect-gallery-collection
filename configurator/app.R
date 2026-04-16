@@ -179,6 +179,13 @@ ui <- page_sidebar(
         font-size: 0.875rem;
       }
 
+      /* Disabled state for config wrapper */
+      #sidebar-config-wrapper.disabled-overlay {
+        opacity: 0.4;
+        pointer-events: none;
+        user-select: none;
+      }
+
       /* Loading overlay */
       #sidebar-config-wrapper { position: relative; }
       #sidebar-loading-overlay {
@@ -202,8 +209,8 @@ ui <- page_sidebar(
       options = list(placeholder = "Select a collection dashboard...")
     ),
 
-    # Config fields wrapped with loading overlay
-    tags$div(id = "sidebar-config-wrapper",
+    # Config fields wrapped with loading overlay (starts disabled)
+    tags$div(id = "sidebar-config-wrapper", class = "disabled-overlay",
       shinyjs::hidden(
         tags$div(id = "sidebar-loading-overlay",
           tags$span(class = "spinner-border spinner-border-sm me-2", role = "status", `aria-label` = "Loading"),
@@ -287,6 +294,7 @@ server <- function(input, output, session) {
   # Reactive values
   selected_guids <- reactiveVal(character(0))
   search_results <- reactiveVal(list())
+  has_searched <- reactiveVal(FALSE)
   selected_theme <- reactiveVal("minimal")
   notify <- function(msg, type = "default") {
     showNotification(msg, type = type, duration = if (type == "error") NULL else 5)
@@ -363,6 +371,7 @@ server <- function(input, output, session) {
     })
     results <- search_content(input$search_query)
     search_results(results)
+    has_searched(TRUE)
   })
 
   # Load config when a dashboard is selected
@@ -372,7 +381,10 @@ server <- function(input, output, session) {
     if (nchar(guid) == 0) return()
 
     shinyjs::show("sidebar-loading-overlay")
-    on.exit(shinyjs::hide("sidebar-loading-overlay"))
+    on.exit({
+      shinyjs::hide("sidebar-loading-overlay")
+      shinyjs::removeClass("sidebar-config-wrapper", "disabled-overlay")
+    })
 
     # Fetch content info for title/description
     content <- get_content(guid)
@@ -409,9 +421,14 @@ server <- function(input, output, session) {
   output$search_results_ui <- renderUI({
     results <- search_results()
     if (length(results) == 0) {
+      msg <- if (has_searched()) {
+        "No content matches your search."
+      } else {
+        "Search for content to add to your collection."
+      }
       return(tags$div(
         style = "display: flex; align-items: center; justify-content: center; min-height: 300px; padding-bottom: 80px;",
-        tags$p(class = "text-muted", "No content matches your search.")
+        tags$p(class = "text-muted", msg)
       ))
     }
 
