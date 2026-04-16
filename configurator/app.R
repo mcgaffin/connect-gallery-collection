@@ -89,16 +89,37 @@ update_content <- function(guid, title, description) {
     req_perform()
 }
 
+# Cookie jar file for maintaining session affinity across render + poll requests
+cookie_jar <- tempfile(fileext = ".txt")
+
 render_content <- function(guid) {
   tryCatch({
-    request(paste0(connect_server, "/__api__/v1/content/", guid, "/render")) |>
+    resp <- request(paste0(connect_server, "/__api__/v1/content/", guid, "/render")) |>
       api_headers() |>
       req_method("POST") |>
+      req_cookie_preserve(cookie_jar) |>
       req_perform()
-    TRUE
+    result <- resp_body_json(resp)
+    task_id <- result$task_id %||% NULL
+    message("Render triggered for ", guid, ", task_id: ", task_id)
+    task_id
   }, error = function(e) {
     message("Render error: ", e$message)
-    FALSE
+    NULL
+  })
+}
+
+get_task_status <- function(task_id) {
+  tryCatch({
+    resp <- request(paste0(connect_server, "/__api__/v1/tasks/", task_id)) |>
+      api_headers() |>
+      req_url_query(wait = 1, first = 0) |>
+      req_cookie_preserve(cookie_jar) |>
+      req_perform()
+    resp_body_json(resp)
+  }, error = function(e) {
+    message("Task poll error for ", task_id, ": ", e$message)
+    list(finished = TRUE, code = -1, error = e$message)
   })
 }
 
@@ -471,6 +492,11 @@ server <- function(input, output, session) {
     )
   })
 
+  # Render task polling state
+  render_task_id <- reactiveVal(NULL)
+  render_dashboard_guid <- reactiveVal(NULL)
+  render_progress_id <- reactiveVal(NULL)
+
   # Save and render
   observeEvent(input$save_config, {
     req(input$dashboard_guid)
@@ -503,13 +529,57 @@ server <- function(input, output, session) {
       shinyjs::html("save_config", "Rendering...")
 
       # Trigger re-render
-      success <- render_content(guid)
+      task_id <- render_content(guid)
 
-      if (success) {
-        dashboard_url <- paste0(connect_server, "/content/", guid, "/")
+      if (!is.null(task_id)) {
+        # Show in-progress toast
+        progress_id <- showNotification(
+          ui = tags$div(
+            tags$span(class = "spinner-border spinner-border-sm me-2"),
+            "Rendering your collection..."
+          ),
+          type = "message",
+          duration = NULL  # Stays until we dismiss it
+        )
+        render_task_id(task_id)
+        render_dashboard_guid(guid)
+        render_progress_id(progress_id)
+      } else {
+        notify("Configuration saved but render could not be triggered.", type = "warning")
+      }
+    }, error = function(e) {
+      notify(paste("Error:", e$message), type = "error")
+    })
+
+    shinyjs::enable("save_config")
+    shinyjs::html("save_config", "Save & Render")
+  })
+
+  # Poll render task status
+  observe({
+    task_id <- render_task_id()
+    req(task_id)
+
+    # Poll every 2 seconds
+    invalidateLater(2000)
+
+    status <- get_task_status(task_id)
+
+    if (isTRUE(status$finished)) {
+      # Dismiss the progress toast
+      progress_id <- render_progress_id()
+      if (!is.null(progress_id)) {
+        removeNotification(progress_id)
+      }
+
+      guid <- render_dashboard_guid()
+      dashboard_url <- paste0(connect_server, "/content/", guid, "/")
+
+      if (is.null(status$code) || status$code == 0) {
+        # Success
         showNotification(
           ui = tags$div(
-            tags$p("Your collection is rendering. Once complete, refresh the page to see the latest version."),
+            tags$p("Your collection is ready!"),
             tags$a(
               href = dashboard_url,
               target = "_blank",
@@ -518,18 +588,19 @@ server <- function(input, output, session) {
             )
           ),
           type = "message",
-          duration = 10
+          duration = 15
         )
       } else {
-        notify("Configuration saved but render could not be triggered. You may need to manually re-render the dashboard.", type = "warning")
+        # Render failed
+        error_msg <- status$error %||% "Unknown error"
+        notify(paste("Render failed:", error_msg), type = "error")
       }
-    }, error = function(e) {
-      notify(paste("Error:", e$message), type = "error")
-    })
 
-    # Re-enable button and switch to Status tab
-    shinyjs::enable("save_config")
-    shinyjs::html("save_config", "Save & Render")
+      # Clear polling state
+      render_task_id(NULL)
+      render_dashboard_guid(NULL)
+      render_progress_id(NULL)
+    }
   })
 }
 
