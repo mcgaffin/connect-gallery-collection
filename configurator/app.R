@@ -156,6 +156,13 @@ ui <- page_sidebar(
   title = "Collection Configurator",
   theme = bs_theme(preset = "shiny"),
   shinyjs::useShinyjs(),
+  tags$head(tags$style("
+    @media (prefers-reduced-motion: reduce) {
+      .spinner-border {
+        animation: none;
+      }
+    }
+  ")),
 
   sidebar = sidebar(
     width = 380,
@@ -199,7 +206,7 @@ ui <- page_sidebar(
     tags$div(id = "sidebar-config-wrapper",
       shinyjs::hidden(
         tags$div(id = "sidebar-loading-overlay",
-          tags$span(class = "spinner-border spinner-border-sm me-2"),
+          tags$span(class = "spinner-border spinner-border-sm me-2", role = "status", `aria-label` = "Loading"),
           "Loading configuration..."
         )
       ),
@@ -535,7 +542,7 @@ server <- function(input, output, session) {
         # Show in-progress toast
         progress_id <- showNotification(
           ui = tags$div(
-            tags$span(class = "spinner-border spinner-border-sm me-2"),
+            tags$span(class = "spinner-border spinner-border-sm me-2", role = "status", `aria-label` = "Loading"),
             "Rendering your collection..."
           ),
           type = "message",
