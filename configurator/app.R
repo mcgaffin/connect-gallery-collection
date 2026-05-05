@@ -128,7 +128,7 @@ fetch_collection_dashboards <- function() {
     resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
       api_headers() |>
       req_url_query(
-        q = "published:true tag:_collection_",
+        q = "published:true __content-collection__",
         include = "owner",
         page_size = 100
       ) |>
