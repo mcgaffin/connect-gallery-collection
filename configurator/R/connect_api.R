@@ -40,7 +40,7 @@ get_content <- function(connect_server, connect_api_key, guid) {
       httr2::req_url_query(include = "owner") |>
       httr2::req_perform()
     httr2::resp_body_json(resp)
-  }, error = function(e) NULL)
+  }, error = function(e) { message("get_content error: ", e$message); NULL })
 }
 
 # Discovery: list all collection dashboards via the marker in `name`.
