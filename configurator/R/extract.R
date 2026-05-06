@@ -5,7 +5,8 @@ extract_collection_json <- function(tarball_path) {
     tmp <- tempfile(); dir.create(tmp)
     on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
 
-    contents <- utils::untar(tarball_path, list = TRUE)
+    contents <- suppressWarnings(utils::untar(tarball_path, list = TRUE))
+    if (isTRUE(attr(contents, "status") != 0L)) return(NULL)
     target <- contents[basename(contents) == "collection.json"]
     if (length(target) == 0) return(NULL)
 

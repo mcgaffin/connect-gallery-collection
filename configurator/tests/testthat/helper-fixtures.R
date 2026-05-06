@@ -13,6 +13,7 @@ for (f in helpers) source(f, local = FALSE)
 # `files` is a named list: name -> content string. NULL value means skip the file.
 make_bundle_tarball <- function(files) {
   staging <- tempfile(); dir.create(staging)
+  on.exit(unlink(staging, recursive = TRUE), add = TRUE)
   for (name in names(files)) {
     content <- files[[name]]
     if (is.null(content)) next
