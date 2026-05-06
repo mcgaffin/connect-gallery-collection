@@ -1,0 +1,39 @@
+COLLECTION_NAME_MARKER <- "__content-collection__"
+
+build_config <- function(title, description, intro_markdown, theme,
+                         source_type, guids, tag) {
+  cfg <- list(
+    title = title %||% "",
+    description = description %||% "",
+    intro_markdown = intro_markdown %||% "",
+    theme = theme %||% "minimal",
+    source_type = source_type %||% "manual"
+  )
+  if (identical(source_type, "tag")) {
+    cfg$source_tag <- tag %||% ""
+  } else {
+    cfg$guids <- as.character(guids %||% character(0))
+  }
+  cfg
+}
+
+parse_config <- function(cfg) {
+  cfg <- cfg %||% list()
+  list(
+    title          = cfg$title %||% "",
+    description    = cfg$description %||% "",
+    intro_markdown = cfg$intro_markdown %||% "",
+    theme          = cfg$theme %||% "minimal",
+    source_type    = cfg$source_type %||% "manual",
+    source_tag     = cfg$source_tag %||% "",
+    guids          = as.character(unlist(cfg$guids %||% character(0)))
+  )
+}
+
+make_collection_name <- function() {
+  paste0(COLLECTION_NAME_MARKER, "-", uuid::UUIDgenerate())
+}
+
+# Null-coalescing operator. Defined here so helper modules can be sourced
+# standalone in tests. Shiny also defines %||%; the redefinition is harmless.
+`%||%` <- function(a, b) if (is.null(a) || (length(a) == 1 && is.na(a))) b else a
