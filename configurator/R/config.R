@@ -34,6 +34,7 @@ make_collection_name <- function() {
   paste0(COLLECTION_NAME_MARKER, "-", uuid::UUIDgenerate())
 }
 
-# Null-coalescing operator. Defined here so helper modules can be sourced
-# standalone in tests. Shiny also defines %||%; the redefinition is harmless.
+# Null-coalescing operator. Treats both NULL and a length-1 NA as "missing"
+# so config values from JSON or partial Connect API responses fall back to
+# defaults consistently.
 `%||%` <- function(a, b) if (is.null(a) || (length(a) == 1 && is.na(a))) b else a
