@@ -14,6 +14,15 @@ local({
 connect_server <- Sys.getenv("CONNECT_SERVER", "http://localhost:3939")
 connect_api_key <- Sys.getenv("CONNECT_API_KEY", "")
 
+# Configure rsconnect so deployApp() targets this Connect by name="connect".
+# Idempotent; safe to call on every app start.
+if (nzchar(connect_api_key)) {
+  tryCatch(
+    setup_rsconnect(connect_server, connect_api_key),
+    error = function(e) message("setup_rsconnect: ", e$message)
+  )
+}
+
 # Theme definitions
 themes <- list(
   "warm" = list(label = "Warm", bg = "#fffbeb", accent = "#d97706"),
@@ -404,115 +413,112 @@ server <- function(input, output, session) {
     )
   })
 
-  # Render task polling state
-  render_task_id <- reactiveVal(NULL)
-  render_dashboard_guid <- reactiveVal(NULL)
-  render_progress_id <- reactiveVal(NULL)
+  # Background deploy state
+  deploy_handle <- reactiveVal(NULL)
+  deploy_progress_id <- reactiveVal(NULL)
 
-  # Save and render
   observeEvent(input$save_config, {
     req(input$dashboard_guid)
-    shinyjs::disable("save_config")
-    shinyjs::html("save_config", "Saving...")
-    guid <- trimws(input$dashboard_guid)
+    selection <- trimws(input$dashboard_guid)
+    if (!nzchar(selection)) return()
 
-    # Build config
-    config <- list(
-      title = input$collection_title,
-      description = input$collection_description,
+    shinyjs::disable("save_config")
+    shinyjs::html("save_config", "Publishing...")
+
+    cfg <- build_config(
+      title          = input$collection_title,
+      description    = input$collection_description,
       intro_markdown = input$collection_intro,
-      theme = selected_theme(),
-      source_type = input$source_type
+      theme          = selected_theme(),
+      source_type    = input$source_type,
+      guids          = selected_guids(),
+      tag            = input$tag_select
     )
 
-    if (input$source_type == "tag") {
-      config$source_tag <- input$tag_select
-    } else {
-      config$guids <- selected_guids()
+    # CREATE if sentinel; UPDATE otherwise.
+    app_id <- if (identical(selection, "__new__")) NULL else selection
+
+    staged <- tryCatch(
+      stage_bundle(template_dir = "dashboard_template", config = cfg),
+      error = function(e) { notify(paste("Bundle staging failed:", e$message), "error"); NULL }
+    )
+    if (is.null(staged)) {
+      shinyjs::enable("save_config")
+      shinyjs::html("save_config", "Save & Publish")
+      return()
     }
 
-    tryCatch({
-      # Update title and description on the content item
-      update_content(guid, input$collection_title, input$collection_description)
+    handle <- tryCatch(
+      launch_deploy(
+        staged_dir       = staged,
+        app_id           = app_id,
+        app_title        = cfg$title,
+        connect_server   = connect_server,
+        connect_api_key  = connect_api_key
+      ),
+      error = function(e) { notify(paste("Deploy launch failed:", e$message), "error"); NULL }
+    )
+    if (is.null(handle)) {
+      shinyjs::enable("save_config")
+      shinyjs::html("save_config", "Save & Publish")
+      return()
+    }
 
-      # Write config to pin
-      write_collection_pin(guid, config)
+    progress_id <- showNotification(
+      ui = tags$div(
+        tags$span(class = "spinner-border spinner-border-sm me-2",
+                  role = "status", `aria-label` = "Loading"),
+        "Publishing your collection..."
+      ),
+      type = "message",
+      duration = NULL
+    )
 
-      shinyjs::html("save_config", "Rendering...")
-
-      # Trigger re-render
-      task_id <- render_content(guid)
-
-      if (!is.null(task_id)) {
-        # Show in-progress toast
-        progress_id <- showNotification(
-          ui = tags$div(
-            tags$span(class = "spinner-border spinner-border-sm me-2", role = "status", `aria-label` = "Loading"),
-            "Rendering your collection..."
-          ),
-          type = "message",
-          duration = NULL  # Stays until we dismiss it
-        )
-        render_task_id(task_id)
-        render_dashboard_guid(guid)
-        render_progress_id(progress_id)
-      } else {
-        notify("Configuration saved but render could not be triggered.", type = "warning")
-      }
-    }, error = function(e) {
-      notify(paste("Error:", e$message), type = "error")
-    })
-
-    shinyjs::enable("save_config")
-    shinyjs::html("save_config", "Save & Publish")
+    deploy_handle(handle)
+    deploy_progress_id(progress_id)
   })
 
-  # Poll render task status
+  # Poll background deploy
   observe({
-    task_id <- render_task_id()
-    req(task_id)
-
-    # Poll every 2 seconds
+    handle <- deploy_handle()
+    req(handle)
     invalidateLater(2000)
 
-    status <- get_task_status(task_id)
+    if (handle$is_alive()) return()
 
-    if (isTRUE(status$finished)) {
-      # Dismiss the progress toast
-      progress_id <- render_progress_id()
-      if (!is.null(progress_id)) {
-        removeNotification(progress_id)
-      }
+    progress_id <- deploy_progress_id()
+    if (!is.null(progress_id)) removeNotification(progress_id)
 
-      guid <- render_dashboard_guid()
-      dashboard_url <- paste0(connect_server, "/content/", guid, "/")
-
-      if (is.null(status$code) || status$code == 0) {
-        # Success
-        showNotification(
-          ui = tags$div(
-            tags$p("Your collection is ready!"),
-            tags$a(
-              href = dashboard_url,
-              target = "_blank",
-              class = "btn btn-sm btn-outline-primary mt-2",
-              "Open Collection"
-            )
-          ),
-          type = "message",
-          duration = 15
-        )
+    exit_status <- handle$get_exit_status()
+    if (isTRUE(exit_status == 0)) {
+      result <- tryCatch(handle$get_result(), error = function(e) NULL)
+      url <- result$url %||% connect_server
+      showNotification(
+        ui = tags$div(
+          tags$p("Your collection is ready!"),
+          tags$a(
+            href = url, target = "_blank",
+            class = "btn btn-sm btn-outline-primary mt-2",
+            "Open Collection"
+          )
+        ),
+        type = "message",
+        duration = 15
+      )
+    } else {
+      err_lines <- tryCatch(handle$read_error_lines(), error = function(e) character(0))
+      msg <- if (length(err_lines) > 0) {
+        paste(tail(err_lines, 6), collapse = "\n")
       } else {
-        # Render failed
-        error_msg <- status$error %||% "Unknown error"
-        notify(paste("Render failed:", error_msg), type = "error")
+        sprintf("Deploy exited with status %s", exit_status)
       }
-
-      # Clear polling state
-      render_task_id(NULL)
-      render_dashboard_guid(NULL)
-      render_progress_id(NULL)
+      showNotification(paste("Publish failed:\n", msg), type = "error", duration = NULL)
     }
+
+    deploy_handle(NULL)
+    deploy_progress_id(NULL)
+    shinyjs::enable("save_config")
+    shinyjs::html("save_config", "Save & Publish")
   })
 }
 
