@@ -3,7 +3,6 @@
 .RData
 .Ruserdata
 *.html
-!dashboard/index.qmd
 _freeze/
 _site/
 .quarto/
