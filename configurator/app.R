@@ -176,8 +176,8 @@ server <- function(input, output, session) {
 
   # Load collection dashboards on startup
   observe({
-    dashboards <- fetch_collection_dashboards()
-    choices <- c("Select a collection..." = "")
+    dashboards <- fetch_collection_dashboards(connect_server, connect_api_key)
+    choices <- c("Select a collection..." = "", "Create new collection..." = "__new__")
     for (d in dashboards) {
       label <- d$title %||% d$name %||% d$guid
       choices[label] <- d$guid
@@ -187,7 +187,7 @@ server <- function(input, output, session) {
 
   # Load tags on startup
   observe({
-    tags_data <- get_tags()
+    tags_data <- get_tags(connect_server, connect_api_key)
     all_tags(tags_data)
 
     # Build tag choices: only child tags (those with parent_id)
@@ -242,7 +242,7 @@ server <- function(input, output, session) {
       shinyjs::enable("search_btn")
       shinyjs::html("search_btn", "Search")
     })
-    results <- search_content(input$search_query)
+    results <- search_content(connect_server, connect_api_key, input$search_query)
     search_results(results)
     has_searched(TRUE)
   })
@@ -250,44 +250,59 @@ server <- function(input, output, session) {
   # Load config when a dashboard is selected
   observeEvent(input$dashboard_guid, {
     req(input$dashboard_guid)
-    guid <- trimws(input$dashboard_guid)
-    if (nchar(guid) == 0) return()
+    selection <- trimws(input$dashboard_guid)
+    if (!nzchar(selection)) return()
 
+    # CREATE flow: clear the form to defaults, enable the sidebar, no fetch.
+    if (identical(selection, "__new__")) {
+      updateTextInput(session, "collection_title", value = "")
+      updateTextInput(session, "collection_description", value = "")
+      updateTextAreaInput(session, "collection_intro", value = "")
+      selected_theme("minimal")
+      updateRadioButtons(session, "source_type", selected = "manual")
+      updateSelectInput(session, "tag_select", selected = "")
+      selected_guids(character(0))
+      shinyjs::removeClass("sidebar-config-wrapper", "disabled-overlay")
+      return()
+    }
+
+    # UPDATE flow: download the active bundle, extract collection.json.
     shinyjs::show("sidebar-loading-overlay")
     on.exit({
       shinyjs::hide("sidebar-loading-overlay")
       shinyjs::removeClass("sidebar-config-wrapper", "disabled-overlay")
     })
 
-    # Fetch content info for title/description
-    content <- get_content(guid)
+    guid <- selection
+
+    # Pre-fill title/description from Connect content metadata as a fallback.
+    content <- get_content(connect_server, connect_api_key, guid)
     if (!is.null(content)) {
       updateTextInput(session, "collection_title", value = content$title %||% "")
       updateTextInput(session, "collection_description", value = content$description %||% "")
     }
 
-    # Read full config from pin
-    config <- read_collection_pin(guid)
-    if (!is.null(config)) {
-      if (!is.null(config$intro_markdown)) {
-        updateTextAreaInput(session, "collection_intro", value = config$intro_markdown)
-      }
-      if (!is.null(config$theme)) {
-        selected_theme(config$theme)
-      }
-      if (!is.null(config$source_type)) {
-        updateRadioButtons(session, "source_type", selected = config$source_type)
-      }
-      if (!is.null(config$source_tag)) {
-        updateSelectInput(session, "tag_select", selected = config$source_tag)
-      }
-      if (!is.null(config$guids)) {
-        selected_guids(config$guids)
-      }
-      notify("Loaded existing configuration.", type = "message")
-    } else {
-      notify("No existing config found. Title and description loaded from dashboard.", type = "warning")
+    bundle_path <- download_active_bundle(connect_server, connect_api_key, guid)
+    cfg <- if (!is.null(bundle_path)) extract_collection_json(bundle_path) else NULL
+
+    if (is.null(cfg)) {
+      notify(
+        "This collection has no saved settings yet. Saving will publish a fresh configuration.",
+        type = "warning"
+      )
+      return()
     }
+
+    parsed <- parse_config(cfg)
+    updateTextInput(session, "collection_title", value = parsed$title)
+    updateTextInput(session, "collection_description", value = parsed$description)
+    updateTextAreaInput(session, "collection_intro", value = parsed$intro_markdown)
+    selected_theme(parsed$theme)
+    updateRadioButtons(session, "source_type", selected = parsed$source_type)
+    updateSelectInput(session, "tag_select", selected = parsed$source_tag)
+    selected_guids(parsed$guids)
+
+    notify("Loaded existing configuration.", type = "message")
   })
 
   # Render search results with select buttons
@@ -369,7 +384,7 @@ server <- function(input, output, session) {
     }
 
     item_cards <- lapply(guids, function(guid) {
-      item <- get_content(guid)
+      item <- get_content(connect_server, connect_api_key, guid)
       title <- if (!is.null(item)) (item$title %||% item$name %||% guid) else guid
 
       tags$div(class = "card mb-2",
