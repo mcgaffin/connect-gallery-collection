@@ -416,6 +416,7 @@ server <- function(input, output, session) {
   # Background deploy state
   deploy_handle <- reactiveVal(NULL)
   deploy_progress_id <- reactiveVal(NULL)
+  staged_dir <- reactiveVal(NULL)
 
   observeEvent(input$save_config, {
     req(input$dashboard_guid)
@@ -447,6 +448,7 @@ server <- function(input, output, session) {
       shinyjs::html("save_config", "Save & Publish")
       return()
     }
+    staged_dir(staged)
 
     handle <- tryCatch(
       launch_deploy(
@@ -491,20 +493,44 @@ server <- function(input, output, session) {
 
     exit_status <- handle$get_exit_status()
     if (isTRUE(exit_status == 0)) {
-      result <- tryCatch(handle$get_result(), error = function(e) NULL)
-      url <- result$url %||% connect_server
-      showNotification(
-        ui = tags$div(
-          tags$p("Your collection is ready!"),
-          tags$a(
-            href = url, target = "_blank",
-            class = "btn btn-sm btn-outline-primary mt-2",
-            "Open Collection"
-          )
-        ),
-        type = "message",
-        duration = 15
-      )
+      result <- tryCatch(handle$get_result(), error = function(e) e)
+      if (inherits(result, "error")) {
+        # callr serializes R errors; exit status is still 0, so detect explicitly
+        showNotification(
+          paste("Publish failed:", conditionMessage(result)),
+          type = "error", duration = NULL
+        )
+      } else {
+        url <- result$url %||% connect_server
+        showNotification(
+          ui = tags$div(
+            tags$p("Your collection is ready!"),
+            tags$a(
+              href = url, target = "_blank",
+              class = "btn btn-sm btn-outline-primary mt-2",
+              "Open Collection"
+            )
+          ),
+          type = "message",
+          duration = 15
+        )
+
+        # Refresh dropdown so the newly-created (or updated) collection appears
+        dashboards <- fetch_collection_dashboards(connect_server, connect_api_key)
+        choices <- c("Select a collection..." = "", "Create new collection..." = "__new__")
+        for (d in dashboards) {
+          label <- d$title %||% d$name %||% d$guid
+          choices[label] <- d$guid
+        }
+        # If this was a CREATE, select the new guid; otherwise keep current selection
+        selected <- if (!is.na(result$guid) && nzchar(result$guid)) {
+          result$guid
+        } else {
+          isolate(input$dashboard_guid)
+        }
+        updateSelectizeInput(session, "dashboard_guid",
+                             choices = choices, selected = selected)
+      }
     } else {
       err_lines <- tryCatch(handle$read_error_lines(), error = function(e) character(0))
       msg <- if (length(err_lines) > 0) {
@@ -514,6 +540,13 @@ server <- function(input, output, session) {
       }
       showNotification(paste("Publish failed:\n", msg), type = "error", duration = NULL)
     }
+
+    # Clean up the staged bundle directory (success or failure)
+    sd <- staged_dir()
+    if (!is.null(sd) && dir.exists(sd)) {
+      unlink(sd, recursive = TRUE)
+    }
+    staged_dir(NULL)
 
     deploy_handle(NULL)
     deploy_progress_id(NULL)

@@ -41,7 +41,7 @@ setup_rsconnect <- function(connect_server, connect_api_key,
 # On UPDATE, pass appId = <guid> — the existing name is preserved by Connect.
 launch_deploy <- function(staged_dir, app_id, app_title,
                           connect_server, connect_api_key,
-                          marker = "__content-collection__") {
+                          marker = COLLECTION_NAME_MARKER) {
   callr::r_bg(
     func = function(staged_dir, app_id, app_title,
                     connect_server, connect_api_key, marker) {
