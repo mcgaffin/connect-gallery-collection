@@ -62,7 +62,7 @@ launch_deploy <- function(staged_dir, app_id, app_title,
         NULL
       }
 
-      url <- rsconnect::deployApp(
+      ok <- rsconnect::deployApp(
         appDir         = staged_dir,
         appId          = app_id,
         appName        = app_name,
@@ -73,8 +73,32 @@ launch_deploy <- function(staged_dir, app_id, app_title,
         launch.browser = FALSE,
         logLevel       = "normal"
       )
+      if (!isTRUE(ok)) stop("deployApp returned a non-TRUE result")
 
-      list(url = as.character(url), name = app_name)
+      # rsconnect writes a deployment record into staged_dir/rsconnect/.
+      # Read the most recent record to get the real Connect URL and GUID.
+      records <- rsconnect::deployments(appPath = staged_dir)
+      if (nrow(records) == 0) {
+        stop("deployApp succeeded but no deployment record was written")
+      }
+      latest <- records[nrow(records), ]
+
+      # Resolve the GUID with explicit NULL/NA-safe fallbacks because the
+      # callr child does not have R/config.R's %||% in scope.
+      guid <- if (!is.null(latest$appGuid) && nchar(latest$appGuid) > 0) {
+        latest$appGuid
+      } else if (!is.null(latest$appId) && nchar(latest$appId) > 0) {
+        latest$appId
+      } else {
+        NA_character_
+      }
+
+      list(
+        url  = as.character(latest$url),
+        guid = as.character(guid),
+        name = if (!is.null(latest$name) && nchar(latest$name) > 0)
+          as.character(latest$name) else app_name
+      )
     },
     args = list(
       staged_dir       = staged_dir,
