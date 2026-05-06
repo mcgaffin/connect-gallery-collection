@@ -3,143 +3,16 @@ library(shinyjs)
 library(bslib)
 library(httr2)
 library(jsonlite)
-library(pins)
-library(connectapi)
 
-# Connect API helpers
+# Source helper modules. file.path resolves relative to the app's working dir
+# both during local dev (via shiny::runApp) and on Connect.
+local({
+  helpers <- list.files("R", pattern = "\\.R$", full.names = TRUE)
+  for (f in helpers) source(f, local = FALSE)
+})
+
 connect_server <- Sys.getenv("CONNECT_SERVER", "http://localhost:3939")
 connect_api_key <- Sys.getenv("CONNECT_API_KEY", "")
-
-api_headers <- function(req) {
-  if (nchar(connect_api_key) > 0) {
-    req |> req_headers(Authorization = paste("Key", connect_api_key))
-  } else {
-    req
-  }
-}
-
-search_content <- function(query) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
-      api_headers() |>
-      req_url_query(
-        q = paste("published:true", query),
-        include = "owner",
-        page_size = 20
-      ) |>
-      req_perform()
-    result <- resp_body_json(resp)
-    result$results %||% list()
-  }, error = function(e) {
-    message("Search error: ", e$message)
-    list()
-  })
-}
-
-get_tags <- function() {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/tags")) |>
-      api_headers() |>
-      req_perform()
-    resp_body_json(resp)
-  }, error = function(e) {
-    message("Tags error: ", e$message)
-    list()
-  })
-}
-
-get_content <- function(guid) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/content/", guid)) |>
-      api_headers() |>
-      req_url_query(include = "owner") |>
-      req_perform()
-    resp_body_json(resp)
-  }, error = function(e) NULL)
-}
-
-# Pin board for storing collection configs
-get_pin_board <- function() {
-  board_connect()
-}
-
-pin_name_for <- function(guid) {
-  paste0("collection_config_", guid)
-}
-
-read_collection_pin <- function(guid) {
-  tryCatch({
-    board <- get_pin_board()
-    pin_read(board, pin_name_for(guid))
-  }, error = function(e) NULL)
-}
-
-write_collection_pin <- function(guid, config) {
-  board <- get_pin_board()
-  pin_write(board, config, name = pin_name_for(guid),
-    type = "json",
-    title = paste("Collection config:", config$title %||% guid))
-}
-
-update_content <- function(guid, title, description) {
-  request(paste0(connect_server, "/__api__/v1/content/", guid)) |>
-    api_headers() |>
-    req_method("PATCH") |>
-    req_body_json(list(title = title, description = description)) |>
-    req_perform()
-}
-
-# Cookie jar file for maintaining session affinity across render + poll requests
-cookie_jar <- tempfile(fileext = ".txt")
-
-render_content <- function(guid) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/content/", guid, "/render")) |>
-      api_headers() |>
-      req_method("POST") |>
-      req_cookie_preserve(cookie_jar) |>
-      req_perform()
-    result <- resp_body_json(resp)
-    task_id <- result$task_id %||% NULL
-    message("Render triggered for ", guid, ", task_id: ", task_id)
-    task_id
-  }, error = function(e) {
-    message("Render error: ", e$message)
-    NULL
-  })
-}
-
-get_task_status <- function(task_id) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/tasks/", task_id)) |>
-      api_headers() |>
-      req_url_query(wait = 1, first = 0) |>
-      req_cookie_preserve(cookie_jar) |>
-      req_perform()
-    resp_body_json(resp)
-  }, error = function(e) {
-    message("Task poll error for ", task_id, ": ", e$message)
-    list(finished = TRUE, code = -1, error = e$message)
-  })
-}
-
-fetch_collection_dashboards <- function() {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
-      api_headers() |>
-      req_url_query(
-        q = "published:true __content-collection__",
-        include = "owner",
-        page_size = 100
-      ) |>
-      req_perform()
-    result <- resp_body_json(resp)
-    result$results %||% list()
-  }, error = function(e) {
-    message("Fetch collections error: ", e$message)
-    list()
-  })
-}
 
 # Theme definitions
 themes <- list(
@@ -257,7 +130,7 @@ ui <- page_sidebar(
     hr(),
 
     # Save
-    actionButton("save_config", "Save & Render", class = "btn-primary btn-lg w-100")
+    actionButton("save_config", "Save & Publish", class = "btn-primary btn-lg w-100")
     ) # close sidebar-config-wrapper
   ),
 
@@ -576,7 +449,7 @@ server <- function(input, output, session) {
     })
 
     shinyjs::enable("save_config")
-    shinyjs::html("save_config", "Save & Render")
+    shinyjs::html("save_config", "Save & Publish")
   })
 
   # Poll render task status
