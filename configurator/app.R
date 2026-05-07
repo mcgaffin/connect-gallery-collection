@@ -51,6 +51,11 @@ server <- function(input, output, session) {
   deploy_progress  <- reactiveVal(NULL)
   staged_dir       <- reactiveVal(NULL)
 
+  # Track which per-button observers we've registered so refreshes of
+  # collections() / search_results() don't stack duplicate handlers.
+  registered_edit_guids   <- reactiveValues()
+  registered_result_guids <- reactiveValues()
+
   wizard_state <- reactiveValues(
     title = "", description = "", intro_markdown = "",
     theme = "minimal", source_type = "manual",
@@ -96,14 +101,18 @@ server <- function(input, output, session) {
     show_wizard()
   })
 
-  # Edit buttons in the home list
+  # Edit buttons in the home list. Register at most one observer per guid
+  # so refreshes of collections() do not stack duplicate handlers.
   observe({
     for (coll in collections()) {
+      g <- coll$guid
+      if (is.null(g) || isTRUE(registered_edit_guids[[g]])) next
+      registered_edit_guids[[g]] <- TRUE
       local({
-        c_guid <- coll$guid
+        c_guid <- g
         observeEvent(input[[paste0("edit_", c_guid)]], {
           load_existing(c_guid)
-        }, ignoreInit = TRUE, once = FALSE)
+        }, ignoreInit = TRUE)
       })
     }
   })
@@ -184,10 +193,10 @@ server <- function(input, output, session) {
     q <- input$search_query
     if (!is.null(q) && nchar(trimws(q)) > 0) {
       search_results(search_content(connect_server, connect_api_key, q))
-      show_wizard()
     } else {
       search_results(list())
     }
+    show_wizard()
   }, ignoreInit = TRUE)
 
   # Result-row checkbox toggles via custom message handler (HTML checkboxes)
@@ -204,8 +213,11 @@ server <- function(input, output, session) {
 
   observe({
     for (item in search_results()) {
+      g <- item$guid
+      if (is.null(g) || isTRUE(registered_result_guids[[g]])) next
+      registered_result_guids[[g]] <- TRUE
       local({
-        guid <- item$guid
+        guid <- g
         observeEvent(input[[paste0("result_", guid)]], {
           if (guid %in% wizard_state$guids) {
             wizard_state$guids <- setdiff(wizard_state$guids, guid)
@@ -234,8 +246,16 @@ server <- function(input, output, session) {
     if (!isTRUE(valid$ok)) { notify(valid$msg, "warning"); return() }
     new_step <- wizard_step() + 1
     wizard_step(new_step)
-    if (new_step == 4) refresh_preview()
-    show_wizard()
+    if (new_step == 4) {
+      # Render the modal in busy state first so the user sees the spinner
+      # while we synchronously fetch items and build the preview HTML.
+      preview_busy(TRUE)
+      show_wizard()
+      refresh_preview()  # blocking; flips preview_busy to FALSE on completion
+      show_wizard()      # re-render with the rendered preview
+    } else {
+      show_wizard()
+    }
   })
 
   validate_step <- function(step) {
