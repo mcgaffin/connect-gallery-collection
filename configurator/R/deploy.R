@@ -64,7 +64,8 @@ launch_deploy <- function(staged_dir, app_id, app_title,
 
       # rsconnect calls `quarto inspect` during deploy; on Connect the
       # binary often isn't on the Shiny process's PATH. Probe common
-      # locations and pass the path explicitly when found.
+      # locations and tell rsconnect via RSCONNECT_QUARTO. The `quarto`
+      # arg to deployApp is a TRUE/FALSE/NA flag, not a path.
       quarto_bin <- Sys.which("quarto")
       if (!nzchar(quarto_bin)) {
         candidates <- c(
@@ -79,6 +80,9 @@ launch_deploy <- function(staged_dir, app_id, app_title,
           if (file.exists(p)) { quarto_bin <- p; break }
         }
       }
+      if (nzchar(quarto_bin)) {
+        Sys.setenv(RSCONNECT_QUARTO = unname(quarto_bin))
+      }
 
       ok <- rsconnect::deployApp(
         appDir         = staged_dir,
@@ -87,7 +91,6 @@ launch_deploy <- function(staged_dir, app_id, app_title,
         appTitle       = app_title,
         server         = "connect",
         account        = "configurator",
-        quarto         = if (nzchar(quarto_bin)) unname(quarto_bin) else NULL,
         forceUpdate    = TRUE,
         launch.browser = FALSE,
         logLevel       = "normal"
