@@ -496,8 +496,20 @@ server <- function(input, output, session) {
       result <- tryCatch(handle$get_result(), error = function(e) e)
       if (inherits(result, "error")) {
         # callr serializes R errors; exit status is still 0, so detect explicitly
+        msg <- conditionMessage(result)
+        call_str <- tryCatch(deparse(result$call)[[1]], error = function(e) "")
+        stderr_tail <- tryCatch(handle$read_error_lines(), error = function(e) character(0))
+        stdout_tail <- tryCatch(handle$read_output_lines(), error = function(e) character(0))
+        all_lines <- tail(c(stdout_tail, stderr_tail), 30)
+        full_msg <- paste0(
+          "Publish failed: ", msg, "\n",
+          if (nzchar(call_str)) paste0("at: ", call_str, "\n") else "",
+          if (length(all_lines) > 0) paste(all_lines, collapse = "\n") else ""
+        )
+        message(full_msg)  # also log to Connect's content logs
         showNotification(
-          paste("Publish failed:", conditionMessage(result)),
+          tags$pre(style = "white-space: pre-wrap; max-height: 400px; overflow: auto;",
+                   full_msg),
           type = "error", duration = NULL
         )
       } else {
