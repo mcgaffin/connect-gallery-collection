@@ -43,13 +43,29 @@ get_content <- function(connect_server, connect_api_key, guid) {
   }, error = function(e) { message("get_content error: ", e$message); NULL })
 }
 
-# Discovery: list all collection dashboards via the marker in `name`.
+# Discovery: list collection dashboards via the marker in `name`.
+# Uses the search endpoint (broad text match) and filters client-side so
+# we only return items where the marker is actually the name prefix.
 fetch_collection_dashboards <- function(connect_server, connect_api_key) {
   tryCatch({
-    resp <- api_request(connect_server, connect_api_key, "/__api__/v1/content") |>
-      httr2::req_url_query(name = COLLECTION_NAME_MARKER) |>
+    resp <- api_request(connect_server, connect_api_key, "/__api__/v1/search/content") |>
+      httr2::req_url_query(
+        q = COLLECTION_NAME_MARKER,
+        include = "owner",
+        page_size = 100
+      ) |>
       httr2::req_perform()
-    httr2::resp_body_json(resp) %||% list()
+    result <- httr2::resp_body_json(resp)
+    items <- result$results %||% list()
+    matched <- Filter(function(d) {
+      n <- d$name %||% ""
+      startsWith(n, paste0(COLLECTION_NAME_MARKER, "-"))
+    }, items)
+    message(sprintf(
+      "fetch_collection_dashboards: search returned %d items, %d matched marker prefix",
+      length(items), length(matched)
+    ))
+    matched
   }, error = function(e) {
     message("fetch_collection_dashboards error: ", e$message)
     list()
