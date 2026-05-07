@@ -91,3 +91,41 @@ download_active_bundle <- function(connect_server, connect_api_key, guid) {
     NULL
   })
 }
+
+# List collections owned by the current user via Connect's `owner:@me` token.
+fetch_my_collections <- function(connect_server, connect_api_key) {
+  tryCatch({
+    resp <- api_request(connect_server, connect_api_key, "/__api__/v1/search/content") |>
+      httr2::req_url_query(
+        q = paste("owner:@me", COLLECTION_NAME_MARKER),
+        include = "owner",
+        page_size = 100
+      ) |>
+      httr2::req_perform()
+    items <- httr2::resp_body_json(resp)$results %||% list()
+    Filter(function(d) {
+      n <- d$name %||% ""
+      startsWith(n, paste0(COLLECTION_NAME_MARKER, "-"))
+    }, items)
+  }, error = function(e) {
+    message("fetch_my_collections error: ", e$message)
+    list()
+  })
+}
+
+# Search Connect for content matching the given tag.
+fetch_content_by_tag <- function(connect_server, connect_api_key, tag_name) {
+  tryCatch({
+    resp <- api_request(connect_server, connect_api_key, "/__api__/v1/search/content") |>
+      httr2::req_url_query(
+        q = paste0("published:true tag:", tag_name),
+        include = "owner",
+        page_size = 100
+      ) |>
+      httr2::req_perform()
+    httr2::resp_body_json(resp)$results %||% list()
+  }, error = function(e) {
+    message("fetch_content_by_tag error: ", e$message)
+    list()
+  })
+}
