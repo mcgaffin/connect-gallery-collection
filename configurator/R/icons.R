@@ -45,6 +45,6 @@ content_icon_path <- function(app_mode) {
 }
 
 content_type_label <- function(app_mode) {
-  if (is.null(app_mode)) return("")
+  if (is.null(app_mode) || (length(app_mode) == 1 && is.na(app_mode))) return("")
   CONTENT_TYPE_LABELS[[app_mode]] %||% app_mode
 }
