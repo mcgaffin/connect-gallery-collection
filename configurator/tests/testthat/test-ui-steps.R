@@ -16,3 +16,21 @@ test_that("step_describe_ui prefills inputs from state", {
   expect_match(html, "Short",    fixed = TRUE)
   expect_match(html, "# Hi",     fixed = TRUE)
 })
+
+test_that("step_theme_ui renders one button per theme", {
+  ui <- step_theme_ui(state = list(theme = "minimal"))
+  html <- as.character(ui)
+  for (name in names(THEME_COLORS)) {
+    expect_match(html, sprintf('id="theme_%s"', name), fixed = TRUE,
+                 info = sprintf("missing theme button: %s", name))
+  }
+})
+
+test_that("step_theme_ui marks the selected theme with an aria pressed attribute", {
+  ui <- step_theme_ui(state = list(theme = "warm"))
+  html <- as.character(ui)
+  expect_match(html, 'aria-pressed="true"[^>]*id="theme_warm"',
+               perl = TRUE)
+  expect_match(html, 'aria-pressed="false"[^>]*id="theme_minimal"',
+               perl = TRUE)
+})
