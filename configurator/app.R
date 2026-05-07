@@ -3,142 +3,24 @@ library(shinyjs)
 library(bslib)
 library(httr2)
 library(jsonlite)
-library(pins)
-library(connectapi)
 
-# Connect API helpers
+# Source helper modules. file.path resolves relative to the app's working dir
+# both during local dev (via shiny::runApp) and on Connect.
+local({
+  helpers <- list.files("R", pattern = "\\.R$", full.names = TRUE)
+  for (f in helpers) source(f, local = FALSE)
+})
+
 connect_server <- Sys.getenv("CONNECT_SERVER", "http://localhost:3939")
 connect_api_key <- Sys.getenv("CONNECT_API_KEY", "")
 
-api_headers <- function(req) {
-  if (nchar(connect_api_key) > 0) {
-    req |> req_headers(Authorization = paste("Key", connect_api_key))
-  } else {
-    req
-  }
-}
-
-search_content <- function(query) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
-      api_headers() |>
-      req_url_query(
-        q = paste("published:true", query),
-        include = "owner",
-        page_size = 20
-      ) |>
-      req_perform()
-    result <- resp_body_json(resp)
-    result$results %||% list()
-  }, error = function(e) {
-    message("Search error: ", e$message)
-    list()
-  })
-}
-
-get_tags <- function() {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/tags")) |>
-      api_headers() |>
-      req_perform()
-    resp_body_json(resp)
-  }, error = function(e) {
-    message("Tags error: ", e$message)
-    list()
-  })
-}
-
-get_content <- function(guid) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/content/", guid)) |>
-      api_headers() |>
-      req_url_query(include = "owner") |>
-      req_perform()
-    resp_body_json(resp)
-  }, error = function(e) NULL)
-}
-
-# Pin board for storing collection configs
-get_pin_board <- function() {
-  board_connect()
-}
-
-pin_name_for <- function(guid) {
-  paste0("collection_config_", guid)
-}
-
-read_collection_pin <- function(guid) {
-  tryCatch({
-    board <- get_pin_board()
-    pin_read(board, pin_name_for(guid))
-  }, error = function(e) NULL)
-}
-
-write_collection_pin <- function(guid, config) {
-  board <- get_pin_board()
-  pin_write(board, config, name = pin_name_for(guid),
-    type = "json",
-    title = paste("Collection config:", config$title %||% guid))
-}
-
-update_content <- function(guid, title, description) {
-  request(paste0(connect_server, "/__api__/v1/content/", guid)) |>
-    api_headers() |>
-    req_method("PATCH") |>
-    req_body_json(list(title = title, description = description)) |>
-    req_perform()
-}
-
-# Cookie jar file for maintaining session affinity across render + poll requests
-cookie_jar <- tempfile(fileext = ".txt")
-
-render_content <- function(guid) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/content/", guid, "/render")) |>
-      api_headers() |>
-      req_method("POST") |>
-      req_cookie_preserve(cookie_jar) |>
-      req_perform()
-    result <- resp_body_json(resp)
-    task_id <- result$task_id %||% NULL
-    message("Render triggered for ", guid, ", task_id: ", task_id)
-    task_id
-  }, error = function(e) {
-    message("Render error: ", e$message)
-    NULL
-  })
-}
-
-get_task_status <- function(task_id) {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/tasks/", task_id)) |>
-      api_headers() |>
-      req_url_query(wait = 1, first = 0) |>
-      req_cookie_preserve(cookie_jar) |>
-      req_perform()
-    resp_body_json(resp)
-  }, error = function(e) {
-    message("Task poll error for ", task_id, ": ", e$message)
-    list(finished = TRUE, code = -1, error = e$message)
-  })
-}
-
-fetch_collection_dashboards <- function() {
-  tryCatch({
-    resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
-      api_headers() |>
-      req_url_query(
-        q = "published:true __content-collection__",
-        include = "owner",
-        page_size = 100
-      ) |>
-      req_perform()
-    result <- resp_body_json(resp)
-    result$results %||% list()
-  }, error = function(e) {
-    message("Fetch collections error: ", e$message)
-    list()
-  })
+# Configure rsconnect so deployApp() targets this Connect by name="connect".
+# Idempotent; safe to call on every app start.
+if (nzchar(connect_api_key)) {
+  tryCatch(
+    setup_rsconnect(connect_server, connect_api_key),
+    error = function(e) message("setup_rsconnect: ", e$message)
+  )
 }
 
 # Theme definitions
@@ -257,7 +139,7 @@ ui <- page_sidebar(
     hr(),
 
     # Save
-    actionButton("save_config", "Save & Render", class = "btn-primary btn-lg w-100")
+    actionButton("save_config", "Save & Publish", class = "btn-primary btn-lg w-100")
     ) # close sidebar-config-wrapper
   ),
 
@@ -303,8 +185,8 @@ server <- function(input, output, session) {
 
   # Load collection dashboards on startup
   observe({
-    dashboards <- fetch_collection_dashboards()
-    choices <- c("Select a collection..." = "")
+    dashboards <- fetch_collection_dashboards(connect_server, connect_api_key)
+    choices <- c("Select a collection..." = "", "Create new collection..." = "__new__")
     for (d in dashboards) {
       label <- d$title %||% d$name %||% d$guid
       choices[label] <- d$guid
@@ -314,7 +196,7 @@ server <- function(input, output, session) {
 
   # Load tags on startup
   observe({
-    tags_data <- get_tags()
+    tags_data <- get_tags(connect_server, connect_api_key)
     all_tags(tags_data)
 
     # Build tag choices: only child tags (those with parent_id)
@@ -369,7 +251,7 @@ server <- function(input, output, session) {
       shinyjs::enable("search_btn")
       shinyjs::html("search_btn", "Search")
     })
-    results <- search_content(input$search_query)
+    results <- search_content(connect_server, connect_api_key, input$search_query)
     search_results(results)
     has_searched(TRUE)
   })
@@ -377,44 +259,59 @@ server <- function(input, output, session) {
   # Load config when a dashboard is selected
   observeEvent(input$dashboard_guid, {
     req(input$dashboard_guid)
-    guid <- trimws(input$dashboard_guid)
-    if (nchar(guid) == 0) return()
+    selection <- trimws(input$dashboard_guid)
+    if (!nzchar(selection)) return()
 
+    # CREATE flow: clear the form to defaults, enable the sidebar, no fetch.
+    if (identical(selection, "__new__")) {
+      updateTextInput(session, "collection_title", value = "")
+      updateTextInput(session, "collection_description", value = "")
+      updateTextAreaInput(session, "collection_intro", value = "")
+      selected_theme("minimal")
+      updateRadioButtons(session, "source_type", selected = "manual")
+      updateSelectInput(session, "tag_select", selected = "")
+      selected_guids(character(0))
+      shinyjs::removeClass("sidebar-config-wrapper", "disabled-overlay")
+      return()
+    }
+
+    # UPDATE flow: download the active bundle, extract collection.json.
     shinyjs::show("sidebar-loading-overlay")
     on.exit({
       shinyjs::hide("sidebar-loading-overlay")
       shinyjs::removeClass("sidebar-config-wrapper", "disabled-overlay")
     })
 
-    # Fetch content info for title/description
-    content <- get_content(guid)
+    guid <- selection
+
+    # Pre-fill title/description from Connect content metadata as a fallback.
+    content <- get_content(connect_server, connect_api_key, guid)
     if (!is.null(content)) {
       updateTextInput(session, "collection_title", value = content$title %||% "")
       updateTextInput(session, "collection_description", value = content$description %||% "")
     }
 
-    # Read full config from pin
-    config <- read_collection_pin(guid)
-    if (!is.null(config)) {
-      if (!is.null(config$intro_markdown)) {
-        updateTextAreaInput(session, "collection_intro", value = config$intro_markdown)
-      }
-      if (!is.null(config$theme)) {
-        selected_theme(config$theme)
-      }
-      if (!is.null(config$source_type)) {
-        updateRadioButtons(session, "source_type", selected = config$source_type)
-      }
-      if (!is.null(config$source_tag)) {
-        updateSelectInput(session, "tag_select", selected = config$source_tag)
-      }
-      if (!is.null(config$guids)) {
-        selected_guids(config$guids)
-      }
-      notify("Loaded existing configuration.", type = "message")
-    } else {
-      notify("No existing config found. Title and description loaded from dashboard.", type = "warning")
+    bundle_path <- download_active_bundle(connect_server, connect_api_key, guid)
+    cfg <- if (!is.null(bundle_path)) extract_collection_json(bundle_path) else NULL
+
+    if (is.null(cfg)) {
+      notify(
+        "This collection has no saved settings yet. Saving will publish a fresh configuration.",
+        type = "warning"
+      )
+      return()
     }
+
+    parsed <- parse_config(cfg)
+    updateTextInput(session, "collection_title", value = parsed$title)
+    updateTextInput(session, "collection_description", value = parsed$description)
+    updateTextAreaInput(session, "collection_intro", value = parsed$intro_markdown)
+    selected_theme(parsed$theme)
+    updateRadioButtons(session, "source_type", selected = parsed$source_type)
+    updateSelectInput(session, "tag_select", selected = parsed$source_tag)
+    selected_guids(parsed$guids)
+
+    notify("Loaded existing configuration.", type = "message")
   })
 
   # Render search results with select buttons
@@ -496,7 +393,7 @@ server <- function(input, output, session) {
     }
 
     item_cards <- lapply(guids, function(guid) {
-      item <- get_content(guid)
+      item <- get_content(connect_server, connect_api_key, guid)
       title <- if (!is.null(item)) (item$title %||% item$name %||% guid) else guid
 
       tags$div(class = "card mb-2",
@@ -516,97 +413,112 @@ server <- function(input, output, session) {
     )
   })
 
-  # Render task polling state
-  render_task_id <- reactiveVal(NULL)
-  render_dashboard_guid <- reactiveVal(NULL)
-  render_progress_id <- reactiveVal(NULL)
+  # Background deploy state
+  deploy_handle <- reactiveVal(NULL)
+  deploy_progress_id <- reactiveVal(NULL)
+  staged_dir <- reactiveVal(NULL)
 
-  # Save and render
   observeEvent(input$save_config, {
     req(input$dashboard_guid)
-    shinyjs::disable("save_config")
-    shinyjs::html("save_config", "Saving...")
-    guid <- trimws(input$dashboard_guid)
+    selection <- trimws(input$dashboard_guid)
+    if (!nzchar(selection)) return()
 
-    # Build config
-    config <- list(
-      title = input$collection_title,
-      description = input$collection_description,
+    shinyjs::disable("save_config")
+    shinyjs::html("save_config", "Publishing...")
+
+    cfg <- build_config(
+      title          = input$collection_title,
+      description    = input$collection_description,
       intro_markdown = input$collection_intro,
-      theme = selected_theme(),
-      source_type = input$source_type
+      theme          = selected_theme(),
+      source_type    = input$source_type,
+      guids          = selected_guids(),
+      tag            = input$tag_select
     )
 
-    if (input$source_type == "tag") {
-      config$source_tag <- input$tag_select
-    } else {
-      config$guids <- selected_guids()
+    # CREATE if sentinel; UPDATE otherwise.
+    app_id <- if (identical(selection, "__new__")) NULL else selection
+
+    staged <- tryCatch(
+      stage_bundle(template_dir = "dashboard_template", config = cfg),
+      error = function(e) { notify(paste("Bundle staging failed:", e$message), "error"); NULL }
+    )
+    if (is.null(staged)) {
+      shinyjs::enable("save_config")
+      shinyjs::html("save_config", "Save & Publish")
+      return()
+    }
+    staged_dir(staged)
+
+    handle <- tryCatch(
+      launch_deploy(
+        staged_dir       = staged,
+        app_id           = app_id,
+        app_title        = cfg$title,
+        connect_server   = connect_server,
+        connect_api_key  = connect_api_key
+      ),
+      error = function(e) { notify(paste("Deploy launch failed:", e$message), "error"); NULL }
+    )
+    if (is.null(handle)) {
+      shinyjs::enable("save_config")
+      shinyjs::html("save_config", "Save & Publish")
+      return()
     }
 
-    tryCatch({
-      # Update title and description on the content item
-      update_content(guid, input$collection_title, input$collection_description)
+    progress_id <- showNotification(
+      ui = tags$div(
+        tags$span(class = "spinner-border spinner-border-sm me-2",
+                  role = "status", `aria-label` = "Loading"),
+        "Publishing your collection..."
+      ),
+      type = "message",
+      duration = NULL
+    )
 
-      # Write config to pin
-      write_collection_pin(guid, config)
-
-      shinyjs::html("save_config", "Rendering...")
-
-      # Trigger re-render
-      task_id <- render_content(guid)
-
-      if (!is.null(task_id)) {
-        # Show in-progress toast
-        progress_id <- showNotification(
-          ui = tags$div(
-            tags$span(class = "spinner-border spinner-border-sm me-2", role = "status", `aria-label` = "Loading"),
-            "Rendering your collection..."
-          ),
-          type = "message",
-          duration = NULL  # Stays until we dismiss it
-        )
-        render_task_id(task_id)
-        render_dashboard_guid(guid)
-        render_progress_id(progress_id)
-      } else {
-        notify("Configuration saved but render could not be triggered.", type = "warning")
-      }
-    }, error = function(e) {
-      notify(paste("Error:", e$message), type = "error")
-    })
-
-    shinyjs::enable("save_config")
-    shinyjs::html("save_config", "Save & Render")
+    deploy_handle(handle)
+    deploy_progress_id(progress_id)
   })
 
-  # Poll render task status
+  # Poll background deploy
   observe({
-    task_id <- render_task_id()
-    req(task_id)
-
-    # Poll every 2 seconds
+    handle <- deploy_handle()
+    req(handle)
     invalidateLater(2000)
 
-    status <- get_task_status(task_id)
+    if (handle$is_alive()) return()
 
-    if (isTRUE(status$finished)) {
-      # Dismiss the progress toast
-      progress_id <- render_progress_id()
-      if (!is.null(progress_id)) {
-        removeNotification(progress_id)
-      }
+    progress_id <- deploy_progress_id()
+    if (!is.null(progress_id)) removeNotification(progress_id)
 
-      guid <- render_dashboard_guid()
-      dashboard_url <- paste0(connect_server, "/content/", guid, "/")
-
-      if (is.null(status$code) || status$code == 0) {
-        # Success
+    exit_status <- handle$get_exit_status()
+    if (isTRUE(exit_status == 0)) {
+      result <- tryCatch(handle$get_result(), error = function(e) e)
+      if (inherits(result, "error")) {
+        # callr serializes R errors; exit status is still 0, so detect explicitly
+        msg <- conditionMessage(result)
+        call_str <- tryCatch(deparse(result$call)[[1]], error = function(e) "")
+        stderr_tail <- tryCatch(handle$read_error_lines(), error = function(e) character(0))
+        stdout_tail <- tryCatch(handle$read_output_lines(), error = function(e) character(0))
+        all_lines <- tail(c(stdout_tail, stderr_tail), 30)
+        full_msg <- paste0(
+          "Publish failed: ", msg, "\n",
+          if (nzchar(call_str)) paste0("at: ", call_str, "\n") else "",
+          if (length(all_lines) > 0) paste(all_lines, collapse = "\n") else ""
+        )
+        message(full_msg)  # also log to Connect's content logs
+        showNotification(
+          tags$pre(style = "white-space: pre-wrap; max-height: 400px; overflow: auto;",
+                   full_msg),
+          type = "error", duration = NULL
+        )
+      } else {
+        url <- result$url %||% connect_server
         showNotification(
           ui = tags$div(
             tags$p("Your collection is ready!"),
             tags$a(
-              href = dashboard_url,
-              target = "_blank",
+              href = url, target = "_blank",
               class = "btn btn-sm btn-outline-primary mt-2",
               "Open Collection"
             )
@@ -614,17 +526,44 @@ server <- function(input, output, session) {
           type = "message",
           duration = 15
         )
-      } else {
-        # Render failed
-        error_msg <- status$error %||% "Unknown error"
-        notify(paste("Render failed:", error_msg), type = "error")
-      }
 
-      # Clear polling state
-      render_task_id(NULL)
-      render_dashboard_guid(NULL)
-      render_progress_id(NULL)
+        # Refresh dropdown so the newly-created (or updated) collection appears
+        dashboards <- fetch_collection_dashboards(connect_server, connect_api_key)
+        choices <- c("Select a collection..." = "", "Create new collection..." = "__new__")
+        for (d in dashboards) {
+          label <- d$title %||% d$name %||% d$guid
+          choices[label] <- d$guid
+        }
+        # If this was a CREATE, select the new guid; otherwise keep current selection
+        selected <- if (!is.na(result$guid) && nzchar(result$guid)) {
+          result$guid
+        } else {
+          isolate(input$dashboard_guid)
+        }
+        updateSelectizeInput(session, "dashboard_guid",
+                             choices = choices, selected = selected)
+      }
+    } else {
+      err_lines <- tryCatch(handle$read_error_lines(), error = function(e) character(0))
+      msg <- if (length(err_lines) > 0) {
+        paste(tail(err_lines, 6), collapse = "\n")
+      } else {
+        sprintf("Deploy exited with status %s", exit_status)
+      }
+      showNotification(paste("Publish failed:\n", msg), type = "error", duration = NULL)
     }
+
+    # Clean up the staged bundle directory (success or failure)
+    sd <- staged_dir()
+    if (!is.null(sd) && dir.exists(sd)) {
+      unlink(sd, recursive = TRUE)
+    }
+    staged_dir(NULL)
+
+    deploy_handle(NULL)
+    deploy_progress_id(NULL)
+    shinyjs::enable("save_config")
+    shinyjs::html("save_config", "Save & Publish")
   })
 }
 

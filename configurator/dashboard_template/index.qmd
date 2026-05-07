@@ -14,23 +14,15 @@ format:
 
 library(httr2)
 library(jsonlite)
-library(pins)
-library(connectapi)
 
-# Connect API setup
 connect_server <- Sys.getenv("CONNECT_SERVER", "")
 connect_api_key <- Sys.getenv("CONNECT_API_KEY", "")
-content_guid <- Sys.getenv("CONNECT_CONTENT_GUID", "")
 
-# Read collection config from pin
-pin_name <- paste0("collection_config_", content_guid)
-config <- tryCatch({
-  board <- board_connect()
-  pin_read(board, pin_name)
-}, error = function(e) {
-  message("No collection config pin found: ", e$message)
-  list()
-})
+# Settings travel with the bundle in collection.json (written by the configurator)
+config <- tryCatch(
+  jsonlite::read_json("collection.json", simplifyVector = TRUE),
+  error = function(e) { message("No collection.json: ", e$message); list() }
+)
 
 # Defaults
 collection_title <- config$title %||% "Content Collection"
