@@ -64,28 +64,32 @@ launch_deploy <- function(staged_dir, app_id, app_title,
 
       # rsconnect calls `quarto inspect` during deploy; on Connect the
       # binary often isn't on the Shiny process's PATH. Probe common
-      # locations and tell rsconnect via RSCONNECT_QUARTO. The `quarto`
-      # arg to deployApp is a TRUE/FALSE/NA flag, not a path.
-      quarto_bin <- Sys.which("quarto")
+      # locations, set both RSCONNECT_QUARTO and prepend to PATH so
+      # findQuarto() and any later Sys.which() both see it.
+      versioned <- sort(Sys.glob("/opt/quarto/*/bin/quarto"), decreasing = TRUE)
+      candidates <- c(
+        unname(Sys.which("quarto")),
+        Sys.getenv("QUARTO_PATH"),
+        Sys.getenv("RSCONNECT_QUARTO"),
+        versioned,
+        "/opt/quarto/bin/quarto",
+        "/usr/local/bin/quarto",
+        "/usr/lib/rstudio-server/bin/quarto/bin/quarto"
+      )
+      candidates <- candidates[nzchar(candidates)]
+      quarto_bin <- ""
+      for (p in candidates) {
+        if (file.exists(p)) { quarto_bin <- p; break }
+      }
       if (!nzchar(quarto_bin)) {
-        # Versioned Connect installs (newest version wins)
-        versioned <- sort(Sys.glob("/opt/quarto/*/bin/quarto"), decreasing = TRUE)
-        candidates <- c(
-          Sys.getenv("QUARTO_PATH"),
-          Sys.getenv("RSCONNECT_QUARTO"),
-          versioned,
-          "/opt/quarto/bin/quarto",
-          "/usr/local/bin/quarto",
-          "/usr/lib/rstudio-server/bin/quarto/bin/quarto"
-        )
-        candidates <- candidates[nzchar(candidates)]
-        for (p in candidates) {
-          if (file.exists(p)) { quarto_bin <- p; break }
-        }
+        stop(sprintf(
+          "Quarto binary not found. Tried: %s. Set QUARTO_PATH or RSCONNECT_QUARTO as an env var on the configurator's content settings.",
+          paste(candidates, collapse = ", ")
+        ))
       }
-      if (nzchar(quarto_bin)) {
-        Sys.setenv(RSCONNECT_QUARTO = unname(quarto_bin))
-      }
+      Sys.setenv(RSCONNECT_QUARTO = unname(quarto_bin))
+      Sys.setenv(PATH = paste(dirname(quarto_bin), Sys.getenv("PATH"), sep = .Platform$path.sep))
+      message("Using quarto: ", quarto_bin)
 
       ok <- rsconnect::deployApp(
         appDir         = staged_dir,
