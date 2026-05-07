@@ -96,3 +96,24 @@ test_that("step_select_ui shows tag selector in tag mode", {
   expect_match(html, "favorites",       fixed = TRUE)
   expect_match(html, "research",        fixed = TRUE)
 })
+
+test_that("step_preview_ui shows the rendered HTML when not busy", {
+  ui <- step_preview_ui(html_string = "<h1>Hello</h1>",
+                        source_type = "manual", busy = FALSE)
+  html <- as.character(ui)
+  expect_match(html, "<h1>Hello</h1>", fixed = TRUE)
+  expect_no_match(html, "Generating preview", fixed = TRUE)
+})
+
+test_that("step_preview_ui shows a busy spinner when busy", {
+  ui <- step_preview_ui(html_string = "", source_type = "manual", busy = TRUE)
+  html <- as.character(ui)
+  expect_match(html, "Generating preview", fixed = TRUE)
+})
+
+test_that("step_preview_ui shows the tag-mode caveat in tag mode", {
+  ui <- step_preview_ui(html_string = "<p>X</p>",
+                        source_type = "tag", busy = FALSE)
+  html <- as.character(ui)
+  expect_match(html, "snapshot from now", fixed = TRUE)
+})
