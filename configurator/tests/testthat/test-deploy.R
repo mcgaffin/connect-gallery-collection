@@ -27,3 +27,27 @@ test_that("stage_bundle errors clearly when template dir does not exist", {
     "template directory not found"
   )
 })
+
+test_that("stage_bundle drops .posit/ and renv build artifacts", {
+  tmpl <- tempfile(); dir.create(tmpl)
+  writeLines("---\ntitle: x\n---", file.path(tmpl, "index.qmd"))
+  writeLines("lock", file.path(tmpl, "renv.lock"))
+  # Things that should be dropped
+  dir.create(file.path(tmpl, ".posit", "publish"), recursive = TRUE)
+  writeLines("stale", file.path(tmpl, ".posit", "publish", "old.toml"))
+  dir.create(file.path(tmpl, "renv"))
+  writeLines("source('renv/activate.R')", file.path(tmpl, "renv", "activate.R"))
+  writeLines('{}', file.path(tmpl, "renv", "settings.json"))
+  dir.create(file.path(tmpl, "renv", "library"))
+  writeLines("binary", file.path(tmpl, "renv", "library", "leftover"))
+
+  staged <- stage_bundle(template_dir = tmpl, config = list(title = "T"))
+  on.exit(unlink(staged, recursive = TRUE), add = TRUE)
+
+  expect_true(file.exists(file.path(staged, "index.qmd")))
+  expect_true(file.exists(file.path(staged, "renv.lock")))
+  expect_true(file.exists(file.path(staged, "renv", "activate.R")))
+  expect_true(file.exists(file.path(staged, "renv", "settings.json")))
+  expect_false(dir.exists(file.path(staged, ".posit")))
+  expect_false(dir.exists(file.path(staged, "renv", "library")))
+})

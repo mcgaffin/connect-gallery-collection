@@ -1,14 +1,34 @@
 # Copy `template_dir`'s contents into a fresh tempdir and write
 # collection.json next to them. Returns the staged dir path.
+# Skips publisher state and renv build artifacts that should never be
+# part of a per-collection deploy bundle.
+STAGE_BUNDLE_SKIP <- c(
+  ".posit",          # Posit Publisher records
+  ".quarto",         # Quarto build cache
+  "_freeze",         # Quarto frozen renders
+  "_site",           # Quarto rendered site
+  "rsconnect"        # rsconnect deployment record from prior calls
+)
+
 stage_bundle <- function(template_dir, config) {
   if (!dir.exists(template_dir)) {
     stop(sprintf("stage_bundle: template directory not found: %s", template_dir))
   }
   staged <- tempfile("collection-bundle-")
   dir.create(staged)
-  files <- list.files(template_dir, full.names = TRUE, all.files = TRUE,
-                      no.. = TRUE)
-  file.copy(files, staged, recursive = TRUE)
+  entries <- list.files(template_dir, full.names = TRUE, all.files = TRUE,
+                        no.. = TRUE)
+  entries <- entries[!basename(entries) %in% STAGE_BUNDLE_SKIP]
+  file.copy(entries, staged, recursive = TRUE)
+  # Inside renv/, drop everything except activate.R and settings.json
+  staged_renv <- file.path(staged, "renv")
+  if (dir.exists(staged_renv)) {
+    keep <- c("activate.R", "settings.json")
+    inside <- list.files(staged_renv, full.names = TRUE, all.files = TRUE,
+                         no.. = TRUE)
+    drop <- inside[!basename(inside) %in% keep]
+    if (length(drop) > 0) unlink(drop, recursive = TRUE)
+  }
   jsonlite::write_json(
     config,
     file.path(staged, "collection.json"),
