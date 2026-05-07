@@ -68,9 +68,12 @@ launch_deploy <- function(staged_dir, app_id, app_title,
       # arg to deployApp is a TRUE/FALSE/NA flag, not a path.
       quarto_bin <- Sys.which("quarto")
       if (!nzchar(quarto_bin)) {
+        # Versioned Connect installs (newest version wins)
+        versioned <- sort(Sys.glob("/opt/quarto/*/bin/quarto"), decreasing = TRUE)
         candidates <- c(
           Sys.getenv("QUARTO_PATH"),
           Sys.getenv("RSCONNECT_QUARTO"),
+          versioned,
           "/opt/quarto/bin/quarto",
           "/usr/local/bin/quarto",
           "/usr/lib/rstudio-server/bin/quarto/bin/quarto"
