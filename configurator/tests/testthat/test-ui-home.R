@@ -107,36 +107,28 @@ test_that("home_view falls back to the Connect content description when meta is 
   expect_match(html, "from Connect", fixed = TRUE)
 })
 
-test_that("home_view renders thumbnail_url when present (relative path)", {
-  collections <- list(list(guid = "g1", title = "Coll A",
-                           thumbnail_url = "/content/g1/__icon__/abc"))
+test_that("home_view renders the Connect __thumbnail__ URL for each row", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
   ui <- home_view(collections = collections,
                    connect_server = "https://connect.example.com")
   html <- as.character(ui)
   expect_match(html,
-    'src="https://connect.example.com/content/g1/__icon__/abc"',
+    'src="https://connect.example.com/content/g1/__thumbnail__"',
     fixed = TRUE)
 })
 
-test_that("home_view passes through absolute thumbnail URLs unchanged", {
-  collections <- list(list(guid = "g1", title = "Coll A",
-                           thumbnail_url = "https://cdn.example.com/x.png"))
-  ui <- home_view(collections = collections,
-                   connect_server = "https://connect.example.com")
-  html <- as.character(ui)
-  expect_match(html, 'src="https://cdn.example.com/x.png"', fixed = TRUE)
-})
-
-test_that("home_view falls back to icons/collection.svg when no thumbnail_url", {
+test_that("home_view strips a trailing slash from connect_server in the thumbnail URL", {
   collections <- list(list(guid = "g1", title = "Coll A"))
-  ui <- home_view(collections = collections)
+  ui <- home_view(collections = collections,
+                   connect_server = "https://connect.example.com/")
   html <- as.character(ui)
-  expect_match(html, 'src="icons/collection.svg"', fixed = TRUE)
+  expect_match(html,
+    'src="https://connect.example.com/content/g1/__thumbnail__"',
+    fixed = TRUE)
 })
 
-test_that("home_view also uses collection.svg as the broken-image fallback", {
-  collections <- list(list(guid = "g1", title = "Coll A",
-                           thumbnail_url = "/content/g1/__icon__/abc"))
+test_that("home_view ships the collection.svg fallback in <img onerror>", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
   ui <- home_view(collections = collections,
                    connect_server = "https://connect.example.com")
   html <- as.character(ui)

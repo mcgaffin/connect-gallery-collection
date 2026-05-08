@@ -29,15 +29,15 @@
   }
 }
 
-# Resolve the thumbnail image source for a collection. Prefers the Connect
-# `thumbnail_url` (prefixed with the server when relative) and falls back to
-# the bundled collection.svg when none is set or the image fails to load.
+# Build the Connect thumbnail URL for a collection. Connect serves
+# thumbnails at /content/<guid>/__thumbnail__; non-2xx responses (no
+# thumbnail set on the content) trigger the <img onerror> fallback to
+# the bundled collection.svg.
 .thumbnail_src <- function(coll, connect_server = "") {
-  url <- coll$thumbnail_url %||% ""
-  if (!nzchar(url)) return("icons/collection.svg")
-  if (grepl("^https?://", url)) return(url)
+  guid <- coll$guid %||% ""
+  if (!nzchar(guid)) return("icons/collection.svg")
   server <- sub("/$", "", connect_server %||% "")
-  if (startsWith(url, "/")) paste0(server, url) else paste0(server, "/", url)
+  paste0(server, "/content/", guid, "/__thumbnail__")
 }
 
 # Bootstrap Icons clipboard glyph, inlined so we don't add a dependency
