@@ -23,3 +23,14 @@ test_that("home_view renders one row per collection", {
   expect_match(html, 'id="edit_g1"', fixed = TRUE)
   expect_match(html, 'id="edit_g2"', fixed = TRUE)
 })
+
+test_that("home_view renders an Open link per row pointing at the deployed URL", {
+  collections <- list(
+    list(guid = "g1", title = "Coll A", last_deployed_time = "2026-01-01T00:00:00Z")
+  )
+  ui <- home_view(collections = collections,
+                   connect_server = "https://connect.example.com")
+  html <- as.character(ui)
+  expect_match(html, ">Open</a>", fixed = TRUE)
+  expect_match(html, 'href="https://connect.example.com/content/g1/"', fixed = TRUE)
+})

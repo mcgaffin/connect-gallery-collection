@@ -70,6 +70,19 @@ ui <- page_fillable(
         font-size: 0.9rem;
       }
 
+      /* Modal title wrapper needs to fill the header width so the BETA pill
+         can sit flush against the right margin. */
+      .modal-title { width: 100%; }
+
+      /* Search-results / Selected subtab — active state uses a custom dark
+         gray instead of Bootstrap's btn-secondary. */
+      #select_subtab_results.btn-secondary,
+      #select_subtab_selected.btn-secondary {
+        background-color: #404041;
+        border-color: #404041;
+        color: #fff;
+      }
+
       /* Result list scrolls inside the modal body if it overflows */
       .wizard-step-body .result-list {
         max-height: 40vh;
@@ -176,7 +189,7 @@ server <- function(input, output, session) {
 
   # ---- home view ----
   output$home_ui <- renderUI({
-    if (view() == "home") home_view(collections())
+    if (view() == "home") home_view(collections(), connect_server = connect_server)
     else NULL    # wizard is rendered into a modal via showModal
   })
 

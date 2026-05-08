@@ -4,22 +4,28 @@
   if (is.na(d)) "" else format(d, "%b %d, %Y")
 }
 
-.home_row <- function(coll) {
+.home_row <- function(coll, connect_server = "") {
   guid  <- coll$guid %||% ""
   title <- coll$title %||% coll$name %||% guid
   date  <- .format_home_date(coll$last_deployed_time)
+  open_url <- paste0(connect_server %||% "", "/content/", guid, "/")
   shiny::tags$div(class = "d-flex align-items-center py-3 px-3 border-bottom",
     shiny::tags$div(class = "flex-grow-1",
       shiny::tags$div(class = "fw-medium", title),
       shiny::tags$div(class = "text-muted small",
         if (nzchar(date)) paste("Last published:", date) else "")
     ),
-    shiny::actionButton(paste0("edit_", guid), "Edit",
-                        class = "btn-sm btn-outline-primary")
+    shiny::tags$div(class = "d-flex gap-2",
+      shiny::actionButton(paste0("edit_", guid), "Edit",
+                          class = "btn-sm btn-primary"),
+      shiny::tags$a(href = open_url, target = "_blank",
+                    class = "btn btn-sm btn-outline-secondary",
+                    "Open")
+    )
   )
 }
 
-home_view <- function(collections) {
+home_view <- function(collections, connect_server = "") {
   shiny::tagList(
     shiny::tags$div(class = "container py-4",
       shiny::tags$div(class = "d-flex align-items-center justify-content-between mb-4",
@@ -34,7 +40,7 @@ home_view <- function(collections) {
         )
       } else {
         shiny::tags$div(class = "border rounded",
-          lapply(collections, .home_row)
+          lapply(collections, .home_row, connect_server = connect_server)
         )
       },
       shiny::tags$div(class = "mt-4 text-end",
