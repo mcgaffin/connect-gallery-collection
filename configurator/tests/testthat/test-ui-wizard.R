@@ -47,3 +47,35 @@ test_that("wizard_modal_dialog footer says Update on step 4 (edit)", {
   html <- as.character(modal)
   expect_match(html, ">Update<", fixed = TRUE)
 })
+
+test_that("wizard_modal_dialog uses tab nav (not breadcrumb) in edit mode", {
+  modal <- wizard_modal_dialog(step = 1, mode = "edit",
+                               state = list(title = "X"),
+                               body = shiny::tags$div())
+  html <- as.character(modal)
+  # Tab buttons exist
+  for (i in 1:4) {
+    expect_match(html, sprintf('id="wizard_tab_%d"', i), fixed = TRUE)
+  }
+})
+
+test_that("wizard_modal_dialog edit-mode footer shows only Cancel + Update", {
+  modal <- wizard_modal_dialog(step = 1, mode = "edit",
+                               state = list(title = "X"),
+                               body = shiny::tags$div())
+  html <- as.character(modal)
+  expect_match(html, 'id="wizard_cancel"', fixed = TRUE)
+  expect_match(html, 'id="wizard_publish"', fixed = TRUE)
+  expect_match(html, ">Update<", fixed = TRUE)
+  expect_no_match(html, 'id="wizard_back"', fixed = TRUE)
+  expect_no_match(html, 'id="wizard_next"', fixed = TRUE)
+})
+
+test_that("wizard_modal_dialog edit-mode footer shows tab clicks even on step 4", {
+  modal <- wizard_modal_dialog(step = 4, mode = "edit",
+                               state = list(title = "X"),
+                               body = shiny::tags$div())
+  html <- as.character(modal)
+  expect_match(html, 'id="wizard_tab_1"', fixed = TRUE)
+  expect_match(html, ">Update<", fixed = TRUE)
+})

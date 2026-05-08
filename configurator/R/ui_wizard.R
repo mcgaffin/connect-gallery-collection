@@ -18,22 +18,43 @@ WIZARD_STEP_TITLES <- c("Select content", "Describe", "Theme", "Preview")
                   do.call(shiny::tagList, interleaved))
 }
 
+.wizard_tabnav <- function(step) {
+  tabs <- lapply(seq_along(WIZARD_STEP_TITLES), function(i) {
+    label <- sprintf("%d. %s", i, WIZARD_STEP_TITLES[i])
+    is_active <- (i == step)
+    shiny::actionButton(
+      paste0("wizard_tab_", i),
+      label,
+      class = paste("btn", if (is_active) "btn-primary" else "btn-outline-secondary"),
+      style = "border-radius: 0.5rem; margin-right: 0.5rem;"
+    )
+  })
+  shiny::tags$div(class = "border-bottom pb-3 mb-3 d-flex flex-wrap",
+                  do.call(shiny::tagList, tabs))
+}
+
 .wizard_footer <- function(step, mode) {
-  primary_label <- if (step < 4) "Next" else if (mode == "edit") "Update" else "Publish"
-  primary_id    <- if (step < 4) "wizard_next" else "wizard_publish"
+  is_edit <- identical(mode, "edit")
+  primary_label <- if (is_edit) "Update"
+                    else if (step < 4) "Next"
+                    else "Publish"
+  primary_id <- if (is_edit) "wizard_publish"
+                 else if (step < 4) "wizard_next"
+                 else "wizard_publish"
   shiny::tags$div(
-    style = "display:flex; align-items:center; justify-content:space-between;",
+    class = "wizard-footer-row",
+    style = "display:flex; align-items:center; justify-content:space-between; width:100%;",
     shiny::tags$a(href = "https://forum.posit.co/",
                   target = "_blank",
                   class = "text-muted small",
                   "Share feedback ↗"),
     shiny::tags$div(class = "d-flex gap-2",
-      if (step > 1) shiny::actionButton("wizard_back", "Back",
-                                        class = "btn-outline-secondary"),
+      if (!is_edit && step > 1) shiny::actionButton("wizard_back", "Back",
+                                        class = "btn-outline-secondary btn-compact"),
       shiny::actionButton("wizard_cancel", "Cancel",
-                          class = "btn-outline-secondary"),
+                          class = "btn-outline-secondary btn-compact"),
       shiny::actionButton(primary_id, primary_label,
-                          class = "btn-primary")
+                          class = "btn-primary btn-compact")
     )
   )
 }
@@ -44,12 +65,14 @@ wizard_modal_dialog <- function(step, mode, state, body) {
   } else {
     "Add a content collection"
   }
+  nav <- if (identical(mode, "edit")) .wizard_tabnav(step) else .wizard_breadcrumb(step)
   shiny::modalDialog(
-    title = shiny::tags$div(class = "d-flex align-items-center gap-2",
+    title = shiny::tags$div(
+      class = "d-flex align-items-center justify-content-between w-100",
       shiny::tags$span(title_text),
       shiny::tags$span(class = "badge bg-info text-dark", "BETA")
     ),
-    .wizard_breadcrumb(step),
+    nav,
     body,
     footer = .wizard_footer(step, mode),
     size = "l",

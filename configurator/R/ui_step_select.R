@@ -54,8 +54,6 @@ step_select_ui <- function(state, search_query, search_results, all_tags) {
   # Manual-mode body
   manual_body <- shiny::tagList(
     shiny::tags$div(class = "input-group",
-      shiny::tags$span(class = "input-group-text",
-                       shiny::tags$span(class = "bi bi-search", "\U0001F50D")),
       shiny::textInput("search_query", label = NULL,
                        value = search_query %||% "",
                        placeholder = "Search for content to add...",
@@ -74,14 +72,15 @@ step_select_ui <- function(state, search_query, search_results, all_tags) {
     } else {
       shiny::tagList(
         shiny::tags$div(class = "py-2 px-3 border-top border-bottom",
-          shiny::tags$input(type = "checkbox", id = "select_all",
-                            class = "form-check-input me-2"),
-          shiny::tags$label(`for` = "select_all",
-            sprintf("Select all %d", length(search_results)))
+          shiny::actionButton("select_all",
+                              sprintf("Select all %d", length(search_results)),
+                              class = "btn-link p-0")
         ),
-        lapply(search_results, function(item) {
-          .result_row(item, (item$guid %||% "") %in% selected_guids)
-        })
+        shiny::tags$div(class = "result-list",
+          lapply(search_results, function(item) {
+            .result_row(item, (item$guid %||% "") %in% selected_guids)
+          })
+        )
       )
     }
   )
@@ -98,9 +97,11 @@ step_select_ui <- function(state, search_query, search_results, all_tags) {
   shiny::tagList(
     shiny::tags$div(class = "wizard-step-body",
       .beta_callout(),
-      shiny::radioButtons("source_type", label = NULL,
-        choices = c("Select content" = "manual", "Use a tag" = "tag"),
-        selected = source_type, inline = TRUE),
+      shiny::tags$div(class = "segmented-radio mb-3",
+        shiny::radioButtons("source_type", label = NULL,
+          choices = c("Select content" = "manual", "Use a tag" = "tag"),
+          selected = source_type, inline = TRUE)
+      ),
       if (identical(source_type, "manual")) manual_body else tag_body
     )
   )

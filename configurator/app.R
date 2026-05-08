@@ -30,7 +30,85 @@ ui <- page_fillable(
   tags$head(
     tags$style("
       @media (prefers-reduced-motion: reduce) { .spinner-border { animation: none; } }
-      .modal-dialog { max-width: 760px; }
+
+      /* App body never scrolls; modal contains its own scroll region */
+      body { overflow: hidden; }
+
+      /* Modal sizing: fit viewport, scroll inside the body */
+      .modal-dialog {
+        max-width: 760px;
+        max-height: 90vh;
+        margin: 5vh auto;
+        display: flex;
+        align-items: stretch;
+      }
+      .modal-content {
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+      }
+      .modal-body {
+        overflow-y: auto;
+        flex: 1 1 auto;
+      }
+
+      /* Footer layout: Share feedback far-left, buttons far-right */
+      .modal-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .modal-footer > .wizard-footer-row {
+        flex: 1 1 auto;
+      }
+
+      /* Compact, more-rounded buttons in the wizard footer */
+      .btn-compact {
+        padding: 0.375rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+      }
+
+      /* Segmented radio: hide native radios, style labels as connected pills */
+      .segmented-radio .shiny-options-group { display: inline-flex; }
+      .segmented-radio .radio-inline,
+      .segmented-radio .form-check-inline {
+        margin: 0 !important;
+        padding: 0;
+      }
+      .segmented-radio .radio-inline input[type='radio'],
+      .segmented-radio .form-check-inline input[type='radio'] {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .segmented-radio .radio-inline {
+        display: inline-block;
+        border: 1px solid #4e6e8e;
+        padding: 0.5rem 1.5rem;
+        cursor: pointer;
+        background: white;
+        color: #4e6e8e;
+        font-weight: 500;
+      }
+      .segmented-radio .radio-inline:first-child {
+        border-radius: 0.5rem 0 0 0.5rem;
+      }
+      .segmented-radio .radio-inline:last-child {
+        border-radius: 0 0.5rem 0.5rem 0;
+        border-left: 0;
+      }
+      .segmented-radio .radio-inline:has(input:checked) {
+        background: #4e6e8e;
+        color: white;
+      }
+
+      /* Result list scrolls inside the modal body if it overflows */
+      .wizard-step-body .result-list {
+        max-height: 40vh;
+        overflow-y: auto;
+      }
     ")
   ),
   uiOutput("home_ui")
@@ -199,14 +277,17 @@ server <- function(input, output, session) {
     show_wizard()
   }, ignoreInit = TRUE)
 
-  # Result-row checkbox toggles via custom message handler (HTML checkboxes)
+  # select_all is now an actionButton (counter); toggle select/deselect visible results
   observeEvent(input$select_all, {
     results <- search_results()
     all_guids <- vapply(results, function(r) r$guid %||% "", character(1))
-    if (isTRUE(input$select_all)) {
-      wizard_state$guids <- unique(c(wizard_state$guids, all_guids))
-    } else {
+    # Toggle: if every visible result is currently selected, deselect them all;
+    # otherwise add them all to the selection.
+    all_selected <- length(all_guids) > 0 && all(all_guids %in% wizard_state$guids)
+    if (all_selected) {
       wizard_state$guids <- setdiff(wizard_state$guids, all_guids)
+    } else {
+      wizard_state$guids <- unique(c(wizard_state$guids, all_guids))
     }
     show_wizard()
   }, ignoreInit = TRUE)
@@ -239,6 +320,26 @@ server <- function(input, output, session) {
   observeEvent(input$wizard_back, {
     wizard_step(max(1, wizard_step() - 1))
     show_wizard()
+  })
+
+  # Tab nav (edit mode): clicking a tab jumps to that step
+  observe({
+    for (i in 1:4) {
+      local({
+        target <- i
+        observeEvent(input[[paste0("wizard_tab_", target)]], {
+          wizard_step(target)
+          if (target == 4) {
+            preview_busy(TRUE)
+            show_wizard()
+            refresh_preview()
+            show_wizard()
+          } else {
+            show_wizard()
+          }
+        }, ignoreInit = TRUE)
+      })
+    }
   })
 
   observeEvent(input$wizard_next, {
@@ -291,6 +392,20 @@ server <- function(input, output, session) {
   # ---- publish ----
   observeEvent(input$wizard_publish, { trigger_publish() })
   trigger_publish <- function() {
+    is_edit <- !is.null(editing_guid())
+    if (is_edit) {
+      # Validate every step; on first failure, switch to that tab and stop.
+      for (step in 1:4) {
+        v <- validate_step(step)
+        if (!isTRUE(v$ok)) {
+          wizard_step(step)
+          notify(v$msg, "error")
+          show_wizard()
+          return()
+        }
+      }
+    }
+    # Existing create-flow validation already happened step-by-step.
     cfg <- build_config(
       title          = wizard_state$title,
       description    = wizard_state$description,
