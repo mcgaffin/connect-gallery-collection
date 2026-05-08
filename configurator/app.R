@@ -92,8 +92,8 @@ ui <- page_fillable(
       /* Row toggle: each search result is an actionButton spanning the row.
          Counter-based (immune to DOM-rebind misfires) but visually a checkbox
          row. NOTE: shiny::actionButton wraps its content inside
-         <span class="action-label">, so the flex layout has to live on that
-         inner span — not on the <button> itself. */
+         span.action-label, so the flex layout has to live on that inner
+         span -- not on the button itself. */
       .row-toggle {
         width: 100%;
         text-align: left;
