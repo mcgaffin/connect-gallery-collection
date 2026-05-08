@@ -70,28 +70,36 @@ ui <- page_fillable(
         font-size: 0.9rem;
       }
 
-      /* Segmented radio: hide native radios, style labels as connected pills.
-         Use flex on the option container so there's no whitespace gap between
-         the two pills. */
-      .segmented-radio .shiny-options-group,
-      .segmented-radio .form-group,
-      .segmented-radio > div {
-        display: inline-flex;
-        gap: 0;
+      /* Segmented radio: hide native radios, style each option wrapper as a
+         connected pill. Force every container in the radioButtons subtree to
+         flex with zero gap, then kill all margin/padding on every descendant
+         so neither Bootstrap 5's `.form-check-inline { margin-right }` nor any
+         whitespace between sibling labels can produce a visible seam. */
+      .segmented-radio,
+      .segmented-radio > *,
+      .segmented-radio .shiny-options-group {
+        display: inline-flex !important;
+        gap: 0 !important;
       }
-      .segmented-radio .radio-inline,
-      .segmented-radio .form-check-inline {
+      .segmented-radio * {
         margin: 0 !important;
-        padding: 0 !important;
       }
       .segmented-radio input[type='radio'] {
         position: absolute;
         opacity: 0;
-        width: 1px;
-        height: 1px;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        cursor: pointer;
+        z-index: 2;
       }
+      /* The clickable pill itself: applies whether Shiny wraps each option
+         in label.radio-inline, div.form-check.form-check-inline, or anything
+         else. */
       .segmented-radio .radio-inline,
+      .segmented-radio .form-check,
       .segmented-radio .form-check-inline {
+        position: relative;
         display: inline-block;
         border: 1px solid #4e6e8e;
         padding: 0.5rem 1.5rem !important;
@@ -100,18 +108,34 @@ ui <- page_fillable(
         color: #4e6e8e;
         font-weight: 500;
       }
+      .segmented-radio .radio-inline label,
+      .segmented-radio .form-check label,
+      .segmented-radio .form-check-inline label {
+        cursor: pointer;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: inline-block;
+      }
       .segmented-radio .radio-inline:first-child,
+      .segmented-radio .form-check:first-child,
       .segmented-radio .form-check-inline:first-child {
         border-radius: 0.5rem 0 0 0.5rem;
       }
       .segmented-radio .radio-inline:last-child,
+      .segmented-radio .form-check:last-child,
       .segmented-radio .form-check-inline:last-child {
         border-radius: 0 0.5rem 0.5rem 0;
         border-left: 0;
       }
       .segmented-radio .radio-inline:has(input:checked),
+      .segmented-radio .form-check:has(input:checked),
       .segmented-radio .form-check-inline:has(input:checked) {
         background: #4e6e8e;
+        color: white;
+      }
+      .segmented-radio .radio-inline:has(input:checked) label,
+      .segmented-radio .form-check:has(input:checked) label,
+      .segmented-radio .form-check-inline:has(input:checked) label {
         color: white;
       }
 
