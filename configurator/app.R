@@ -308,7 +308,8 @@ server <- function(input, output, session) {
       "3" = step_theme_ui(state = s),
       "4" = step_preview_ui(html_string = preview_html(),
                             source_type = s$source_type,
-                            busy = preview_busy())
+                            busy = preview_busy(),
+                            theme = s$theme)
     )
   }
 
