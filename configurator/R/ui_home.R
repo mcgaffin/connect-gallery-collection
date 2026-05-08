@@ -29,7 +29,7 @@ home_view <- function(collections, connect_server = "") {
   shiny::tagList(
     shiny::tags$div(class = "container py-4",
       shiny::tags$div(class = "d-flex align-items-center justify-content-between mb-4",
-        shiny::tags$h1(class = "h3 mb-0", "Content Collections"),
+        shiny::tags$h1(class = "h3 mb-0", "My Content Collections"),
         shiny::actionButton("new_collection", "+ New collection",
                             class = "btn-primary")
       ),
