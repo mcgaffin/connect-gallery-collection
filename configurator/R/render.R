@@ -30,6 +30,16 @@ THEME_COLORS <- list(
   paste0(connect_server %||% "", "/content/", guid, "/")
 }
 
+# Connect content descriptions sometimes contain stray HTML (from prior
+# tooling, or copy-pasted markup). Strip tags so cards show plain text only.
+.strip_html <- function(text) {
+  if (is.null(text) || !nzchar(text)) return("")
+  # Remove tags and collapse whitespace.
+  out <- gsub("<[^>]*>", " ", text)
+  out <- gsub("\\s+", " ", out)
+  trimws(out)
+}
+
 # Render a collection to a single HTML string.
 # `items` is a list of lists with at least: guid, title, description,
 # app_mode, last_deployed_time, owner (or owner_first/last_name fields).
@@ -61,6 +71,17 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
 .collection-card__type { background: %s; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.6875rem; }
 .collection-card__owner { font-size: 0.75rem; color: #999; }
 #quarto-header, #quarto-footer, .quarto-title-block, #title-block-header { display: none !important; }
+/* Strip default styling from Quarto cell wrappers so empty cells (from the
+   include:false setup chunk and from results:asis output containers) do not
+   render as visible empty boxes. */
+.cell, .cell-output, .cell-output-stdout, .cell-output-display, .quarto-layout-row {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.cell:empty, .cell-output:empty { display: none !important; }
 </style>',
     colors$bg, colors$border, colors$accent, colors$accent,
     colors$border, colors$accent, colors$accent, colors$bg)
@@ -96,7 +117,7 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
   for (item in items) {
     guid <- item$guid %||% ""
     title <- item$title %||% item$name %||% "Untitled"
-    description <- item$description %||% ""
+    description <- .strip_html(item$description %||% "")
     if (nchar(description) > 120) {
       description <- paste0(substr(description, 1, 120), "...")
     }

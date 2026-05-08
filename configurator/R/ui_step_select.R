@@ -53,28 +53,33 @@ step_select_ui <- function(state, search_query, search_results, all_tags) {
 
   # Manual-mode body
   manual_body <- shiny::tagList(
-    shiny::tags$div(class = "input-group",
-      shiny::textInput("search_query", label = NULL,
-                       value = search_query %||% "",
-                       placeholder = "Search for content to add...",
-                       width = "100%"),
-      shiny::tags$span(class = "input-group-text",
-                       sprintf("%d selected", length(selected_guids)))
-    ),
+    shiny::textInput("search_query", label = NULL,
+                     value = search_query %||% "",
+                     placeholder = "Search for content to add...",
+                     width = "100%"),
     if (length(search_results) == 0) {
-      shiny::tags$div(class = "text-center text-muted my-4 p-4",
-        style = "border:1px dashed #ced4da; border-radius:0.5rem;",
-        if (nzchar(search_query %||% ""))
-          "No content matches your search."
-        else
-          "Start typing to find content you've published or have access to"
+      shiny::tagList(
+        # Show the selection counter even when there are no current results,
+        # right-aligned, no border.
+        shiny::tags$div(class = "d-flex justify-content-end text-muted small mb-2",
+          sprintf("%d selected", length(selected_guids))),
+        shiny::tags$div(class = "text-center text-muted my-4 p-4",
+          style = "border:1px dashed #ced4da; border-radius:0.5rem;",
+          if (nzchar(search_query %||% ""))
+            "No content matches your search."
+          else
+            "Start typing to find content you've published or have access to"
+        )
       )
     } else {
       shiny::tagList(
-        shiny::tags$div(class = "py-2 px-3 border-top border-bottom",
+        shiny::tags$div(
+          class = "d-flex align-items-center justify-content-between py-2 px-3 border-top border-bottom",
           shiny::actionButton("select_all",
                               sprintf("Select all %d", length(search_results)),
-                              class = "btn-link p-0")
+                              class = "btn-link p-0"),
+          shiny::tags$span(class = "text-muted small",
+                           sprintf("%d selected", length(selected_guids)))
         ),
         shiny::tags$div(class = "result-list",
           lapply(search_results, function(item) {

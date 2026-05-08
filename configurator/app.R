@@ -70,36 +70,47 @@ ui <- page_fillable(
         font-size: 0.9rem;
       }
 
-      /* Segmented radio: hide native radios, style labels as connected pills */
-      .segmented-radio .shiny-options-group { display: inline-flex; }
+      /* Segmented radio: hide native radios, style labels as connected pills.
+         Use flex on the option container so there's no whitespace gap between
+         the two pills. */
+      .segmented-radio .shiny-options-group,
+      .segmented-radio .form-group,
+      .segmented-radio > div {
+        display: inline-flex;
+        gap: 0;
+      }
       .segmented-radio .radio-inline,
       .segmented-radio .form-check-inline {
         margin: 0 !important;
-        padding: 0;
+        padding: 0 !important;
       }
-      .segmented-radio .radio-inline input[type='radio'],
-      .segmented-radio .form-check-inline input[type='radio'] {
+      .segmented-radio input[type='radio'] {
         position: absolute;
         opacity: 0;
-        pointer-events: none;
+        width: 1px;
+        height: 1px;
       }
-      .segmented-radio .radio-inline {
+      .segmented-radio .radio-inline,
+      .segmented-radio .form-check-inline {
         display: inline-block;
         border: 1px solid #4e6e8e;
-        padding: 0.5rem 1.5rem;
+        padding: 0.5rem 1.5rem !important;
         cursor: pointer;
         background: white;
         color: #4e6e8e;
         font-weight: 500;
       }
-      .segmented-radio .radio-inline:first-child {
+      .segmented-radio .radio-inline:first-child,
+      .segmented-radio .form-check-inline:first-child {
         border-radius: 0.5rem 0 0 0.5rem;
       }
-      .segmented-radio .radio-inline:last-child {
+      .segmented-radio .radio-inline:last-child,
+      .segmented-radio .form-check-inline:last-child {
         border-radius: 0 0.5rem 0.5rem 0;
         border-left: 0;
       }
-      .segmented-radio .radio-inline:has(input:checked) {
+      .segmented-radio .radio-inline:has(input:checked),
+      .segmented-radio .form-check-inline:has(input:checked) {
         background: #4e6e8e;
         color: white;
       }
@@ -253,7 +264,11 @@ server <- function(input, output, session) {
   observeEvent(input$collection_title,       { wizard_state$title          <- input$collection_title       }, ignoreInit = TRUE)
   observeEvent(input$collection_description, { wizard_state$description    <- input$collection_description }, ignoreInit = TRUE)
   observeEvent(input$collection_intro,       { wizard_state$intro_markdown <- input$collection_intro       }, ignoreInit = TRUE)
-  observeEvent(input$source_type,            { wizard_state$source_type    <- input$source_type             }, ignoreInit = TRUE)
+  observeEvent(input$source_type, {
+    wizard_state$source_type <- input$source_type
+    # Re-render so the body swaps between manual-search and tag-select.
+    show_wizard()
+  }, ignoreInit = TRUE)
   observeEvent(input$tag_select,             { wizard_state$source_tag     <- input$tag_select %||% ""      }, ignoreInit = TRUE)
 
   # Theme button clicks
