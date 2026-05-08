@@ -32,9 +32,9 @@
     shiny::tagList(
       shiny::tags$span(class = paste("row-check",
                                      if (is_selected) "checked" else "")),
-      shiny::tags$img(src = icon, width = "28", height = "28",
+      shiny::tags$img(src = icon, width = "44", height = "44",
                       style = "flex-shrink:0;"),
-      shiny::tags$div(class = "flex-grow-1",
+      shiny::tags$div(class = "flex-grow-1 row-info",
         shiny::tags$div(class = "fw-medium", title),
         shiny::tags$div(class = "text-muted small", label)
       )
@@ -53,10 +53,10 @@
   icon  <- content_icon_path(mode)
   label <- content_type_label(mode)
   shiny::tags$div(
-    class = "d-flex align-items-center gap-3 py-2 px-3 border-top",
-    shiny::tags$img(src = icon, width = "28", height = "28",
+    class = "d-flex align-items-center gap-3 py-2 px-3 border-top selected-row",
+    shiny::tags$img(src = icon, width = "44", height = "44",
                     style = "flex-shrink:0;"),
-    shiny::tags$div(class = "flex-grow-1",
+    shiny::tags$div(class = "flex-grow-1 row-info",
       shiny::tags$div(class = "fw-medium", title),
       shiny::tags$div(class = "text-muted small", label)
     ),

@@ -91,9 +91,13 @@ ui <- page_fillable(
 
       /* Row toggle: each search result is an actionButton spanning the row.
          Counter-based (immune to DOM-rebind misfires) but visually a checkbox
-         row. */
+         row. The button content must stay on a single horizontal row even
+         when long titles/icons are present — the .flex-grow-1 child
+         truncates with ellipsis instead of wrapping. */
       .row-toggle {
-        display: flex;
+        display: flex !important;
+        flex-direction: row;
+        flex-wrap: nowrap;
         align-items: center;
         gap: 0.75rem;
         width: 100%;
@@ -105,9 +109,27 @@ ui <- page_fillable(
         padding: 0.5rem 0.75rem;
         color: inherit;
       }
+      .row-toggle > * { flex-shrink: 0; }
+      .row-toggle > .row-info {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .row-toggle > .row-info > div {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .row-toggle:hover { background: #f8f9fa; }
       .row-toggle.selected { background: #f0f7ff; }
       .row-toggle:focus { outline: 2px solid #4e6e8e; outline-offset: -2px; }
+      /* Same single-row enforcement for the Selected-tab row. */
+      .selected-row .row-info {
+        flex: 1 1 auto; min-width: 0; overflow: hidden;
+      }
+      .selected-row .row-info > div {
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
       .row-check {
         display: inline-block;
         width: 18px;
@@ -318,9 +340,16 @@ server <- function(input, output, session) {
     })
   })
 
-  # Search button / query change
-  observeEvent(input$search_query, {
-    q <- input$search_query
+  # Debounce the search input so typing doesn't fire a search on every
+  # keystroke — that previously caused show_wizard() to re-render the modal
+  # mid-typing and drop characters. The reactive only fires 600ms after the
+  # last change.
+  debounced_search_query <- shiny::debounce(
+    reactive(input$search_query), millis = 600
+  )
+
+  observeEvent(debounced_search_query(), {
+    q <- debounced_search_query()
     if (!is.null(q) && nchar(trimws(q)) > 0) {
       search_results(search_content(connect_server, connect_api_key, q))
     } else {
