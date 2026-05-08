@@ -72,7 +72,10 @@ wizard_modal_dialog <- function(step, mode, state, body) {
       class = "d-flex align-items-center justify-content-between w-100",
       shiny::tags$span(title_text),
       shiny::tags$span(class = "badge",
-        style = "background-color: #3b4f29; color: #000;",
+        style = paste("background-color: #72994e;",
+                      "color: #fff;",
+                      "font-weight: normal;",
+                      "border-radius: 8px;"),
         "beta")
     ),
     nav,

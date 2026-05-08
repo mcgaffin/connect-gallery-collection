@@ -74,12 +74,12 @@ ui <- page_fillable(
          can sit flush against the right margin. */
       .modal-title { width: 100%; }
 
-      /* Search-results / Selected subtab — active state uses a custom dark
+      /* Search-results / Selected subtab — active state uses a custom mid
          gray instead of Bootstrap's btn-secondary. */
       #select_subtab_results.btn-secondary,
       #select_subtab_selected.btn-secondary {
-        background-color: #404041;
-        border-color: #404041;
+        background-color: #707073;
+        border-color: #707073;
         color: #fff;
       }
 
