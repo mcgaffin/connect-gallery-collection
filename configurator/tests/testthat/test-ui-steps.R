@@ -42,11 +42,43 @@ test_that("step_select_ui renders the source-type toggle and beta callout", {
     search_query = "", search_results = list(), all_tags = list()
   )
   html <- as.character(ui)
-  expect_match(html, 'id="source_type"',     fixed = TRUE)
-  expect_match(html, "Select content",       fixed = TRUE)
-  expect_match(html, "Use a tag",            fixed = TRUE)
-  expect_match(html, "experimental feature", fixed = TRUE)
-  expect_match(html, "Posit Community",      fixed = TRUE)
+  expect_match(html, 'id="source_type_manual"', fixed = TRUE)
+  expect_match(html, 'id="source_type_tag"',    fixed = TRUE)
+  expect_match(html, "Select content",          fixed = TRUE)
+  expect_match(html, "Use a tag",               fixed = TRUE)
+  expect_match(html, "experimental feature",    fixed = TRUE)
+  expect_match(html, "Posit Community",         fixed = TRUE)
+})
+
+test_that("step_select_ui shows the search/selected subtab nav with current count", {
+  ui <- step_select_ui(
+    state = list(source_type = "manual", source_tag = "",
+                 guids = c("a", "b", "c")),
+    search_query = "", search_results = list(), all_tags = list(),
+    subtab = "results"
+  )
+  html <- as.character(ui)
+  expect_match(html, 'id="select_subtab_results"',  fixed = TRUE)
+  expect_match(html, 'id="select_subtab_selected"', fixed = TRUE)
+  expect_match(html, "Selected (3)",                fixed = TRUE)
+})
+
+test_that("step_select_ui Selected subtab renders one row per selected guid with remove buttons", {
+  ui <- step_select_ui(
+    state = list(source_type = "manual", source_tag = "",
+                 guids = c("g1", "g2")),
+    search_query = "", search_results = list(), all_tags = list(),
+    subtab = "selected",
+    selected_items = list(
+      g1 = list(guid = "g1", title = "Alpha", app_mode = "shiny"),
+      g2 = list(guid = "g2", title = "Beta",  app_mode = "quarto-static")
+    )
+  )
+  html <- as.character(ui)
+  expect_match(html, "Alpha",            fixed = TRUE)
+  expect_match(html, "Beta",             fixed = TRUE)
+  expect_match(html, 'id="remove_g1"',   fixed = TRUE)
+  expect_match(html, 'id="remove_g2"',   fixed = TRUE)
 })
 
 test_that("step_select_ui shows search input + empty hint in manual mode with no results", {

@@ -70,75 +70,6 @@ ui <- page_fillable(
         font-size: 0.9rem;
       }
 
-      /* Segmented radio: hide native radios, style each option wrapper as a
-         connected pill. Force every container in the radioButtons subtree to
-         flex with zero gap, then kill all margin/padding on every descendant
-         so neither Bootstrap 5's `.form-check-inline { margin-right }` nor any
-         whitespace between sibling labels can produce a visible seam. */
-      .segmented-radio,
-      .segmented-radio > *,
-      .segmented-radio .shiny-options-group {
-        display: inline-flex !important;
-        gap: 0 !important;
-      }
-      .segmented-radio * {
-        margin: 0 !important;
-      }
-      .segmented-radio input[type='radio'] {
-        position: absolute;
-        opacity: 0;
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        cursor: pointer;
-        z-index: 2;
-      }
-      /* The clickable pill itself: applies whether Shiny wraps each option
-         in label.radio-inline, div.form-check.form-check-inline, or anything
-         else. */
-      .segmented-radio .radio-inline,
-      .segmented-radio .form-check,
-      .segmented-radio .form-check-inline {
-        position: relative;
-        display: inline-block;
-        border: 1px solid #4e6e8e;
-        padding: 0.5rem 1.5rem !important;
-        cursor: pointer;
-        background: white;
-        color: #4e6e8e;
-        font-weight: 500;
-      }
-      .segmented-radio .radio-inline label,
-      .segmented-radio .form-check label,
-      .segmented-radio .form-check-inline label {
-        cursor: pointer;
-        margin: 0 !important;
-        padding: 0 !important;
-        display: inline-block;
-      }
-      .segmented-radio .radio-inline:first-child,
-      .segmented-radio .form-check:first-child,
-      .segmented-radio .form-check-inline:first-child {
-        border-radius: 0.5rem 0 0 0.5rem;
-      }
-      .segmented-radio .radio-inline:last-child,
-      .segmented-radio .form-check:last-child,
-      .segmented-radio .form-check-inline:last-child {
-        border-radius: 0 0.5rem 0.5rem 0;
-        border-left: 0;
-      }
-      .segmented-radio .radio-inline:has(input:checked),
-      .segmented-radio .form-check:has(input:checked),
-      .segmented-radio .form-check-inline:has(input:checked) {
-        background: #4e6e8e;
-        color: white;
-      }
-      .segmented-radio .radio-inline:has(input:checked) label,
-      .segmented-radio .form-check:has(input:checked) label,
-      .segmented-radio .form-check-inline:has(input:checked) label {
-        color: white;
-      }
-
       /* Result list scrolls inside the modal body if it overflows */
       .wizard-step-body .result-list {
         max-height: 40vh;
@@ -163,11 +94,15 @@ server <- function(input, output, session) {
   deploy_handle    <- reactiveVal(NULL)
   deploy_progress  <- reactiveVal(NULL)
   staged_dir       <- reactiveVal(NULL)
+  select_subtab    <- reactiveVal("results")          # "results" | "selected"
+  selected_items   <- reactiveVal(list())             # cache: guid -> item
 
   # Track which per-button observers we've registered so refreshes of
-  # collections() / search_results() don't stack duplicate handlers.
-  registered_edit_guids   <- reactiveValues()
-  registered_result_guids <- reactiveValues()
+  # collections() / search_results() / selected items don't stack duplicate
+  # handlers.
+  registered_edit_guids    <- reactiveValues()
+  registered_result_guids  <- reactiveValues()
+  registered_remove_guids  <- reactiveValues()
 
   wizard_state <- reactiveValues(
     title = "", description = "", intro_markdown = "",
@@ -190,6 +125,8 @@ server <- function(input, output, session) {
     wizard_state$source_tag     <- ""
     search_results(list())
     preview_html("")
+    select_subtab("results")
+    selected_items(list())
   }
 
   # ---- initial loads ----
@@ -275,7 +212,9 @@ server <- function(input, output, session) {
       "1" = step_select_ui(state = s,
                            search_query = isolate(input$search_query) %||% "",
                            search_results = search_results(),
-                           all_tags = all_tags()),
+                           all_tags = all_tags(),
+                           subtab = select_subtab(),
+                           selected_items = selected_items()),
       "2" = step_describe_ui(state = s),
       "3" = step_theme_ui(state = s),
       "4" = step_preview_ui(html_string = preview_html(),
@@ -288,12 +227,36 @@ server <- function(input, output, session) {
   observeEvent(input$collection_title,       { wizard_state$title          <- input$collection_title       }, ignoreInit = TRUE)
   observeEvent(input$collection_description, { wizard_state$description    <- input$collection_description }, ignoreInit = TRUE)
   observeEvent(input$collection_intro,       { wizard_state$intro_markdown <- input$collection_intro       }, ignoreInit = TRUE)
-  observeEvent(input$source_type, {
-    wizard_state$source_type <- input$source_type
-    # Re-render so the body swaps between manual-search and tag-select.
+  # Source-type toggle: two actionButtons act as a segmented control.
+  observeEvent(input$source_type_manual, {
+    wizard_state$source_type <- "manual"
+    show_wizard()
+  }, ignoreInit = TRUE)
+  observeEvent(input$source_type_tag, {
+    wizard_state$source_type <- "tag"
     show_wizard()
   }, ignoreInit = TRUE)
   observeEvent(input$tag_select,             { wizard_state$source_tag     <- input$tag_select %||% ""      }, ignoreInit = TRUE)
+
+  # Sub-tab nav (Search results / Selected) inside Select-content mode
+  observeEvent(input$select_subtab_results, {
+    select_subtab("results")
+    show_wizard()
+  }, ignoreInit = TRUE)
+  observeEvent(input$select_subtab_selected, {
+    # Lazy-fetch details for any selected guids we don't already have cached.
+    cache <- selected_items()
+    missing <- setdiff(wizard_state$guids, names(cache))
+    if (length(missing) > 0) {
+      for (g in missing) {
+        item <- get_content(connect_server, connect_api_key, g)
+        if (!is.null(item)) cache[[g]] <- item
+      }
+      selected_items(cache)
+    }
+    select_subtab("selected")
+    show_wizard()
+  }, ignoreInit = TRUE)
 
   # Theme button clicks
   observe({
@@ -321,12 +284,15 @@ server <- function(input, output, session) {
     results <- search_results()
     all_guids <- vapply(results, function(r) r$guid %||% "", character(1))
     # Toggle: if every visible result is currently selected, deselect them all;
-    # otherwise add them all to the selection.
+    # otherwise add them all to the selection AND cache their details.
     all_selected <- length(all_guids) > 0 && all(all_guids %in% wizard_state$guids)
     if (all_selected) {
       wizard_state$guids <- setdiff(wizard_state$guids, all_guids)
     } else {
       wizard_state$guids <- unique(c(wizard_state$guids, all_guids))
+      cache <- selected_items()
+      for (r in results) if (!is.null(r$guid)) cache[[r$guid]] <- r
+      selected_items(cache)
     }
     show_wizard()
   }, ignoreInit = TRUE)
@@ -338,12 +304,34 @@ server <- function(input, output, session) {
       registered_result_guids[[g]] <- TRUE
       local({
         guid <- g
+        full <- item   # capture full item details for caching on add
         observeEvent(input[[paste0("result_", guid)]], {
           if (guid %in% wizard_state$guids) {
             wizard_state$guids <- setdiff(wizard_state$guids, guid)
           } else {
             wizard_state$guids <- c(wizard_state$guids, guid)
+            cache <- selected_items()
+            cache[[guid]] <- full
+            selected_items(cache)
           }
+        }, ignoreInit = TRUE)
+      })
+    }
+  })
+
+  # Remove buttons in the "Selected" subtab
+  observe({
+    for (g in wizard_state$guids) {
+      if (is.null(g) || isTRUE(registered_remove_guids[[g]])) next
+      registered_remove_guids[[g]] <- TRUE
+      local({
+        guid <- g
+        observeEvent(input[[paste0("remove_", guid)]], {
+          wizard_state$guids <- setdiff(wizard_state$guids, guid)
+          cache <- selected_items()
+          cache[[guid]] <- NULL
+          selected_items(cache)
+          show_wizard()
         }, ignoreInit = TRUE)
       })
     }
