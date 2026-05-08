@@ -97,7 +97,7 @@ fetch_my_collections <- function(connect_server, connect_api_key) {
   tryCatch({
     resp <- api_request(connect_server, connect_api_key, "/__api__/v1/search/content") |>
       httr2::req_url_query(
-        q = paste("owner:@me", COLLECTION_NAME_MARKER),
+        q = paste("published:true", "owner:@me", COLLECTION_NAME_MARKER),
         include = "owner",
         page_size = 100
       ) |>
@@ -111,6 +111,19 @@ fetch_my_collections <- function(connect_server, connect_api_key) {
     message("fetch_my_collections error: ", e$message)
     list()
   })
+}
+
+# Build a shareable URL for a piece of Connect content. Prefers vanity_url
+# (a path on the server) and falls back to the canonical /content/<guid> URL.
+share_url <- function(connect_server, content) {
+  server <- sub("/$", "", connect_server %||% "")
+  vu <- content$vanity_url %||% ""
+  if (nzchar(vu)) {
+    if (!startsWith(vu, "/")) vu <- paste0("/", vu)
+    paste0(server, vu)
+  } else {
+    paste0(server, "/content/", content$guid %||% "")
+  }
 }
 
 # Search Connect for content matching the given tag.

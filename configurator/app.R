@@ -164,7 +164,23 @@ ui <- page_fillable(
         background-repeat: no-repeat;
         background-size: 70%;
       }
-    ")
+    "),
+    tags$script(HTML("
+      Shiny.addCustomMessageHandler('clg_copy', function(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text);
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+      });
+    "))
   ),
   uiOutput("home_ui")
 )
@@ -185,11 +201,14 @@ server <- function(input, output, session) {
   staged_dir       <- reactiveVal(NULL)
   select_subtab    <- reactiveVal("results")          # "results" | "selected"
   selected_items   <- reactiveVal(list())             # cache: guid -> item
+  collection_meta  <- reactiveVal(list())             # cache: guid -> meta
+  meta_queue       <- reactiveVal(character(0))       # guids pending fetch
 
   # Track which per-button observers we've registered so refreshes of
   # collections() / search_results() / selected items don't stack duplicate
   # handlers.
   registered_edit_guids    <- reactiveValues()
+  registered_copy_guids    <- reactiveValues()
   registered_result_guids  <- reactiveValues()
   registered_remove_guids  <- reactiveValues()
 
@@ -228,8 +247,47 @@ server <- function(input, output, session) {
 
   # ---- home view ----
   output$home_ui <- renderUI({
-    if (view() == "home") home_view(collections(), connect_server = connect_server)
-    else NULL    # wizard is rendered into a modal via showModal
+    if (view() == "home") {
+      home_view(collections(),
+                connect_server = connect_server,
+                collection_meta = collection_meta())
+    } else NULL    # wizard is rendered into a modal via showModal
+  })
+
+  # Enqueue any new collection guids that don't have cached metadata yet.
+  observe({
+    current <- vapply(collections(),
+                      function(c) c$guid %||% "", character(1))
+    current <- current[nzchar(current)]
+    cached  <- names(collection_meta())
+    pending <- meta_queue()
+    needed  <- setdiff(current, c(cached, pending))
+    if (length(needed) > 0) meta_queue(c(pending, needed))
+  })
+
+  # Process the queue one guid at a time. Each fetch downloads the active
+  # bundle, parses its collection.json, and caches the source-type +
+  # item-count summary for that collection. The home view re-renders as
+  # each entry lands.
+  observe({
+    q <- meta_queue()
+    if (length(q) == 0) return()
+    g <- q[1]
+    # Pop first so a re-fire (e.g. from collections() refresh) won't
+    # double-process this guid.
+    meta_queue(q[-1])
+    bundle <- download_active_bundle(connect_server, connect_api_key, g)
+    cfg <- if (!is.null(bundle)) extract_collection_json(bundle) else NULL
+    parsed <- parse_config(cfg %||% list())
+    cache <- collection_meta()
+    cache[[g]] <- list(
+      source_type = parsed$source_type,
+      n_items     = if (identical(parsed$source_type, "manual"))
+                      length(parsed$guids) else NA_integer_,
+      source_tag  = parsed$source_tag,
+      description = parsed$description
+    )
+    collection_meta(cache)
   })
 
   observeEvent(input$new_collection, {
@@ -251,6 +309,25 @@ server <- function(input, output, session) {
         c_guid <- g
         observeEvent(input[[paste0("edit_", c_guid)]], {
           load_existing(c_guid)
+        }, ignoreInit = TRUE)
+      })
+    }
+  })
+
+  # Copy-link buttons. Resolve the share URL on click (uses vanity_url if
+  # the content has one, else falls back to /content/<guid>).
+  observe({
+    for (coll in collections()) {
+      g <- coll$guid
+      if (is.null(g) || isTRUE(registered_copy_guids[[g]])) next
+      registered_copy_guids[[g]] <- TRUE
+      local({
+        c_guid <- g
+        observeEvent(input[[paste0("copy_", c_guid)]], {
+          info <- get_content(connect_server, connect_api_key, c_guid)
+          url <- share_url(connect_server, info %||% list(guid = c_guid))
+          session$sendCustomMessage("clg_copy", url)
+          notify("Link copied to clipboard.", "message")
         }, ignoreInit = TRUE)
       })
     }
@@ -588,6 +665,16 @@ server <- function(input, output, session) {
         )
         removeModal()
         view("home")
+        # Invalidate stale metadata for the just-published collection so the
+        # row re-fetches with the new source_type/n_items. New collections
+        # (no editing_guid) appear as fresh entries and are queued by the
+        # enqueue observer automatically.
+        eg <- editing_guid()
+        if (!is.null(eg)) {
+          cache <- collection_meta()
+          cache[[eg]] <- NULL
+          collection_meta(cache)
+        }
         collections(fetch_my_collections(connect_server, connect_api_key))
       }
     } else {

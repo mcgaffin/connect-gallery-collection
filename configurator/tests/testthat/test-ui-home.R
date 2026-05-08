@@ -34,3 +34,75 @@ test_that("home_view renders an Open link per row pointing at the deployed URL",
   expect_match(html, ">Open</a>", fixed = TRUE)
   expect_match(html, 'href="https://connect.example.com/content/g1/"', fixed = TRUE)
 })
+
+test_that("home_view renders a Share-this-collection link with copy_<guid> id", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
+  ui <- home_view(collections = collections)
+  html <- as.character(ui)
+  expect_match(html, 'id="copy_g1"', fixed = TRUE)
+  expect_match(html, "Share this collection", fixed = TRUE)
+  # SVG clipboard icon is inlined alongside the label.
+  expect_match(html, "<svg", fixed = TRUE)
+})
+
+test_that("home_view shows a loading placeholder when metadata is missing", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
+  ui <- home_view(collections = collections)
+  html <- as.character(ui)
+  expect_match(html, "Loading details", fixed = TRUE)
+})
+
+test_that("home_view shows item count for search-based collections", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
+  meta <- list(g1 = list(source_type = "manual", n_items = 5))
+  ui <- home_view(collections = collections, collection_meta = meta)
+  html <- as.character(ui)
+  expect_match(html, ">5 items<", fixed = TRUE)
+  # The old "Search-based" prefix is gone.
+  expect_no_match(html, "Search-based")
+})
+
+test_that("home_view singularizes item count when there is one item", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
+  meta <- list(g1 = list(source_type = "manual", n_items = 1))
+  ui <- home_view(collections = collections, collection_meta = meta)
+  html <- as.character(ui)
+  expect_match(html, ">1 item<", fixed = TRUE)
+})
+
+test_that("home_view shows tag name as 'Tag: <name>'", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
+  meta <- list(g1 = list(source_type = "tag", source_tag = "finance"))
+  ui <- home_view(collections = collections, collection_meta = meta)
+  html <- as.character(ui)
+  expect_match(html, "Tag: finance", fixed = TRUE)
+  expect_no_match(html, "Tag-based:")
+})
+
+test_that("home_view renders the collection description when present", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
+  meta <- list(g1 = list(source_type = "manual", n_items = 0,
+                          description = "A short description."))
+  ui <- home_view(collections = collections, collection_meta = meta)
+  html <- as.character(ui)
+  expect_match(html, "A short description.", fixed = TRUE)
+})
+
+test_that("home_view truncates long descriptions with an ellipsis", {
+  long <- paste(rep("a", 200), collapse = "")
+  collections <- list(list(guid = "g1", title = "Coll A"))
+  meta <- list(g1 = list(source_type = "manual", n_items = 0,
+                          description = long))
+  ui <- home_view(collections = collections, collection_meta = meta)
+  html <- as.character(ui)
+  expect_match(html, paste0(paste(rep("a", 120), collapse = ""), "…"),
+               fixed = TRUE)
+})
+
+test_that("home_view falls back to the Connect content description when meta is missing", {
+  collections <- list(list(guid = "g1", title = "Coll A",
+                           description = "from Connect"))
+  ui <- home_view(collections = collections)
+  html <- as.character(ui)
+  expect_match(html, "from Connect", fixed = TRUE)
+})
