@@ -123,9 +123,23 @@ ui <- page_fillable(
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .row-toggle:hover { background: #f8f9fa; }
-      .row-toggle.selected { background: #f0f7ff; }
-      .row-toggle:focus { outline: 2px solid #4e6e8e; outline-offset: -2px; }
+      /* Force readable text in all interactive states — Bootstrap's .btn
+         hover/focus rules would otherwise lighten the title color into
+         the nearly-invisible range against our hover background. */
+      .row-toggle,
+      .row-toggle:hover,
+      .row-toggle:focus,
+      .row-toggle:active,
+      .row-toggle:focus-visible {
+        color: #212529 !important;
+      }
+      .row-toggle .text-muted { color: #6c757d !important; }
+      .row-toggle:hover { background: #f0f4f8 !important; }
+      .row-toggle.selected { background: #e7f1ff !important; }
+      .row-toggle.selected:hover { background: #d9e8fc !important; }
+      .row-toggle:focus-visible {
+        outline: 2px solid #4e6e8e; outline-offset: -2px;
+      }
       /* Same single-row enforcement for the Selected-tab row. */
       .selected-row .row-info {
         flex: 1 1 auto; min-width: 0; overflow: hidden;
@@ -396,6 +410,8 @@ server <- function(input, output, session) {
             cache[[guid]] <- full
             selected_items(cache)
           }
+          # Re-render so the visual checkbox state and selected count update.
+          show_wizard()
         }, ignoreInit = TRUE)
       })
     }
