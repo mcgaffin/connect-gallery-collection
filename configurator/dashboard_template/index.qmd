@@ -2,7 +2,7 @@
 title: "Content Collection"
 format:
   html:
-    theme: default
+    theme: none
     page-layout: full
     toc: false
     embed-resources: true
@@ -75,8 +75,13 @@ if (identical(source_type, "tag") && nzchar(config$source_tag %||% "")) {
 
 ```{r}
 #| echo: false
-#| results: asis
 
-cat(build_collection_html(config, items, THEME_COLORS,
-                          connect_server = connect_server))
+# Emit raw HTML via htmltools so it bypasses pandoc's markdown processing.
+# (`cat(...)` with `results: asis` would let pandoc see the indented lines
+# inside our card HTML and treat them as Markdown code blocks, escaping
+# everything.)
+htmltools::browsable(htmltools::HTML(
+  build_collection_html(config, items, THEME_COLORS,
+                        connect_server = connect_server)
+))
 ```
