@@ -106,3 +106,39 @@ test_that("home_view falls back to the Connect content description when meta is 
   html <- as.character(ui)
   expect_match(html, "from Connect", fixed = TRUE)
 })
+
+test_that("home_view renders thumbnail_url when present (relative path)", {
+  collections <- list(list(guid = "g1", title = "Coll A",
+                           thumbnail_url = "/content/g1/__icon__/abc"))
+  ui <- home_view(collections = collections,
+                   connect_server = "https://connect.example.com")
+  html <- as.character(ui)
+  expect_match(html,
+    'src="https://connect.example.com/content/g1/__icon__/abc"',
+    fixed = TRUE)
+})
+
+test_that("home_view passes through absolute thumbnail URLs unchanged", {
+  collections <- list(list(guid = "g1", title = "Coll A",
+                           thumbnail_url = "https://cdn.example.com/x.png"))
+  ui <- home_view(collections = collections,
+                   connect_server = "https://connect.example.com")
+  html <- as.character(ui)
+  expect_match(html, 'src="https://cdn.example.com/x.png"', fixed = TRUE)
+})
+
+test_that("home_view falls back to icons/collection.svg when no thumbnail_url", {
+  collections <- list(list(guid = "g1", title = "Coll A"))
+  ui <- home_view(collections = collections)
+  html <- as.character(ui)
+  expect_match(html, 'src="icons/collection.svg"', fixed = TRUE)
+})
+
+test_that("home_view also uses collection.svg as the broken-image fallback", {
+  collections <- list(list(guid = "g1", title = "Coll A",
+                           thumbnail_url = "/content/g1/__icon__/abc"))
+  ui <- home_view(collections = collections,
+                   connect_server = "https://connect.example.com")
+  html <- as.character(ui)
+  expect_match(html, "icons/collection.svg", fixed = TRUE)
+})

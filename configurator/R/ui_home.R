@@ -29,6 +29,17 @@
   }
 }
 
+# Resolve the thumbnail image source for a collection. Prefers the Connect
+# `thumbnail_url` (prefixed with the server when relative) and falls back to
+# the bundled collection.svg when none is set or the image fails to load.
+.thumbnail_src <- function(coll, connect_server = "") {
+  url <- coll$thumbnail_url %||% ""
+  if (!nzchar(url)) return("icons/collection.svg")
+  if (grepl("^https?://", url)) return(url)
+  server <- sub("/$", "", connect_server %||% "")
+  if (startsWith(url, "/")) paste0(server, url) else paste0(server, "/", url)
+}
+
 # Bootstrap Icons clipboard glyph, inlined so we don't add a dependency
 # just for one icon. width/height match the surrounding text size.
 .clipboard_icon <- function() {
@@ -55,7 +66,15 @@
   }
   desc <- .truncate_text(raw_desc)
 
-  shiny::tags$div(class = "d-flex align-items-center py-3 px-3 border-bottom",
+  shiny::tags$div(class = "d-flex align-items-center gap-3 py-3 px-3 border-bottom",
+    shiny::tags$img(
+      src = .thumbnail_src(coll, connect_server),
+      width = "64", height = "64",
+      class = "rounded",
+      style = "object-fit: cover; flex-shrink: 0;",
+      alt = "",
+      onerror = "this.onerror=null;this.src='icons/collection.svg';"
+    ),
     shiny::tags$div(class = "flex-grow-1",
       shiny::tags$div(class = "d-flex align-items-baseline gap-3 flex-wrap",
         shiny::tags$div(class = "fw-medium", title),
