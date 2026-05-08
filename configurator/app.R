@@ -91,15 +91,10 @@ ui <- page_fillable(
 
       /* Row toggle: each search result is an actionButton spanning the row.
          Counter-based (immune to DOM-rebind misfires) but visually a checkbox
-         row. The button content must stay on a single horizontal row even
-         when long titles/icons are present — the .flex-grow-1 child
-         truncates with ellipsis instead of wrapping. */
+         row. NOTE: shiny::actionButton wraps its content inside
+         <span class="action-label">, so the flex layout has to live on that
+         inner span — not on the <button> itself. */
       .row-toggle {
-        display: flex !important;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        align-items: center;
-        gap: 0.75rem;
         width: 100%;
         text-align: left;
         background: white;
@@ -109,13 +104,21 @@ ui <- page_fillable(
         padding: 0.5rem 0.75rem;
         color: inherit;
       }
-      .row-toggle > * { flex-shrink: 0; }
-      .row-toggle > .row-info {
+      .row-toggle .action-label {
+        display: flex !important;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 0.75rem;
+        width: 100%;
+      }
+      .row-toggle .action-label > * { flex-shrink: 0; }
+      .row-toggle .action-label > .row-info {
         flex: 1 1 auto;
         min-width: 0;
         overflow: hidden;
       }
-      .row-toggle > .row-info > div {
+      .row-toggle .action-label > .row-info > div {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
