@@ -75,6 +75,43 @@ ui <- page_fillable(
         max-height: 40vh;
         overflow-y: auto;
       }
+
+      /* Row toggle: each search result is an actionButton spanning the row.
+         Counter-based (immune to DOM-rebind misfires) but visually a checkbox
+         row. */
+      .row-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        width: 100%;
+        text-align: left;
+        background: white;
+        border: none;
+        border-top: 1px solid #dee2e6;
+        border-radius: 0;
+        padding: 0.5rem 0.75rem;
+        color: inherit;
+      }
+      .row-toggle:hover { background: #f8f9fa; }
+      .row-toggle.selected { background: #f0f7ff; }
+      .row-toggle:focus { outline: 2px solid #4e6e8e; outline-offset: -2px; }
+      .row-check {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border: 1px solid #adb5bd;
+        border-radius: 0.25rem;
+        flex-shrink: 0;
+        background: white;
+      }
+      .row-toggle.selected .row-check {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><path fill=%22none%22 stroke=%22white%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 stroke-width=%223%22 d=%22M4 8l3 3 6-6%22/></svg>');
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: 70%;
+      }
     ")
   ),
   uiOutput("home_ui")
@@ -305,7 +342,7 @@ server <- function(input, output, session) {
       local({
         guid <- g
         full <- item   # capture full item details for caching on add
-        observeEvent(input[[paste0("result_", guid)]], {
+        observeEvent(input[[paste0("toggle_", guid)]], {
           if (guid %in% wizard_state$guids) {
             wizard_state$guids <- setdiff(wizard_state$guids, guid)
           } else {

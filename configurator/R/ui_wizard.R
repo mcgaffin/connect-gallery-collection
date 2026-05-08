@@ -25,8 +25,9 @@ WIZARD_STEP_TITLES <- c("Select content", "Describe", "Theme", "Preview")
     shiny::actionButton(
       paste0("wizard_tab_", i),
       label,
-      class = paste("btn", if (is_active) "btn-primary" else "btn-outline-secondary"),
-      style = "border-radius: 0.5rem; margin-right: 0.5rem;"
+      class = paste("btn btn-compact",
+                    if (is_active) "btn-primary" else "btn-outline-secondary"),
+      style = "margin-right: 0.5rem;"
     )
   })
   shiny::tags$div(class = "border-bottom pb-3 mb-3 d-flex flex-wrap",

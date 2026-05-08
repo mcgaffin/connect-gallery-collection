@@ -24,20 +24,22 @@
   mode  <- item$app_mode %||% ""
   icon  <- content_icon_path(mode)
   label <- content_type_label(mode)
-  shiny::tags$div(
-    class = paste("d-flex align-items-center gap-3 py-2 px-3 border-top",
-                  if (is_selected) "bg-light" else ""),
-    shiny::tags$input(type = "checkbox",
-      id = paste0("result_", guid),
-      class = "form-check-input result-checkbox",
-      `data-guid` = guid,
-      checked = if (is_selected) "checked" else NULL),
-    shiny::tags$img(src = icon, width = "28", height = "28",
-                    style = "flex-shrink:0;"),
-    shiny::tags$div(class = "flex-grow-1",
-      shiny::tags$div(class = "fw-medium", title),
-      shiny::tags$div(class = "text-muted small", label)
-    )
+  # Use an actionButton so clicks fire as counter events. Stateful inputs
+  # (raw checkboxes) misfire when the modal re-renders and the DOM rebinds —
+  # they would silently remove guids on subtab switches.
+  shiny::actionButton(
+    paste0("toggle_", guid),
+    shiny::tagList(
+      shiny::tags$span(class = paste("row-check",
+                                     if (is_selected) "checked" else "")),
+      shiny::tags$img(src = icon, width = "28", height = "28",
+                      style = "flex-shrink:0;"),
+      shiny::tags$div(class = "flex-grow-1",
+        shiny::tags$div(class = "fw-medium", title),
+        shiny::tags$div(class = "text-muted small", label)
+      )
+    ),
+    class = paste("row-toggle", if (is_selected) "selected" else "")
   )
 }
 
@@ -68,26 +70,28 @@
 # Bootstrap's own .btn-primary and the buttons abut without any gap.
 .source_type_toggle <- function(source_type) {
   is_manual <- !identical(source_type, "tag")
-  shiny::tags$div(class = "btn-group mb-3", role = "group",
+  shiny::tags$div(class = "btn-group", role = "group",
     shiny::actionButton("source_type_manual", "Select content",
-      class = paste("btn", if (is_manual) "btn-primary"
-                          else "btn-outline-secondary")),
+      class = paste("btn btn-compact",
+                    if (is_manual) "btn-primary" else "btn-outline-secondary")),
     shiny::actionButton("source_type_tag", "Use a tag",
-      class = paste("btn", if (!is_manual) "btn-primary"
-                           else "btn-outline-secondary"))
+      class = paste("btn btn-compact",
+                    if (!is_manual) "btn-primary" else "btn-outline-secondary"))
   )
 }
 
 # Subtab nav for "Search results" / "Selected (N)" inside Select-content mode.
 .subtab_nav <- function(active, n_selected) {
-  shiny::tags$div(class = "btn-group mb-3", role = "group",
+  shiny::tags$div(class = "btn-group", role = "group",
     shiny::actionButton("select_subtab_results", "Search results",
-      class = paste("btn", if (identical(active, "selected"))
-                            "btn-outline-secondary" else "btn-secondary")),
+      class = paste("btn btn-compact",
+                    if (identical(active, "selected"))
+                      "btn-outline-secondary" else "btn-secondary")),
     shiny::actionButton("select_subtab_selected",
       sprintf("Selected (%d)", n_selected),
-      class = paste("btn", if (identical(active, "selected"))
-                            "btn-secondary" else "btn-outline-secondary"))
+      class = paste("btn btn-compact",
+                    if (identical(active, "selected"))
+                      "btn-secondary" else "btn-outline-secondary"))
   )
 }
 
@@ -154,11 +158,9 @@ step_select_ui <- function(state, search_query, search_results, all_tags,
     )
   }
 
-  # ---- Manual-mode body (subtab nav + chosen body) ----
-  manual_body <- shiny::tagList(
-    .subtab_nav(subtab, length(selected_guids)),
-    if (identical(subtab, "selected")) selected_body else search_body
-  )
+  # ---- Manual-mode body (just the chosen subtab body; subtab nav is hoisted
+  # to the same row as the source-type toggle below) ----
+  manual_body <- if (identical(subtab, "selected")) selected_body else search_body
 
   # ---- Tag-mode body ----
   tag_body <- shiny::tagList(
@@ -169,10 +171,22 @@ step_select_ui <- function(state, search_query, search_results, all_tags,
       "Content tagged with this tag will be included automatically each time the collection renders. Newly tagged content shows up on the next render.")
   )
 
+  # The "Select content / Use a tag" toggle sits on the left and (in manual
+  # mode) the "Search results / Selected" subtab nav sits on the right —
+  # both on the same row.
+  toggles_row <- shiny::tags$div(
+    class = "d-flex align-items-center justify-content-between mb-3",
+    .source_type_toggle(source_type),
+    if (identical(source_type, "manual"))
+      .subtab_nav(subtab, length(selected_guids))
+    else
+      shiny::tags$div()  # empty spacer to keep the toggle on the left
+  )
+
   shiny::tagList(
     shiny::tags$div(class = "wizard-step-body",
       .beta_callout(),
-      .source_type_toggle(source_type),
+      toggles_row,
       if (identical(source_type, "manual")) manual_body else tag_body
     )
   )
