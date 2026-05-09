@@ -10,16 +10,22 @@ STAGE_BUNDLE_SKIP <- c(
   "rsconnect"        # rsconnect deployment record from prior calls
 )
 
+# Files copied into every staged bundle from the configurator's R/ directory.
+# These are needed by the deployed dashboard's index.qmd at render time.
+STAGE_BUNDLE_R_FILES <- c("render.R", "icons.R")
+
 stage_bundle <- function(template_dir, config) {
   if (!dir.exists(template_dir)) {
     stop(sprintf("stage_bundle: template directory not found: %s", template_dir))
   }
   staged <- tempfile("collection-bundle-")
   dir.create(staged)
+
   entries <- list.files(template_dir, full.names = TRUE, all.files = TRUE,
                         no.. = TRUE)
   entries <- entries[!basename(entries) %in% STAGE_BUNDLE_SKIP]
   file.copy(entries, staged, recursive = TRUE)
+
   # Inside renv/, drop everything except activate.R and settings.json
   staged_renv <- file.path(staged, "renv")
   if (dir.exists(staged_renv)) {
@@ -29,6 +35,15 @@ stage_bundle <- function(template_dir, config) {
     drop <- inside[!basename(inside) %in% keep]
     if (length(drop) > 0) unlink(drop, recursive = TRUE)
   }
+
+  # Copy shared R helpers used by the deployed dashboard's .qmd
+  for (f in STAGE_BUNDLE_R_FILES) {
+    src <- file.path("R", f)
+    if (file.exists(src)) {
+      file.copy(src, file.path(staged, f), overwrite = TRUE)
+    }
+  }
+
   jsonlite::write_json(
     config,
     file.path(staged, "collection.json"),

@@ -51,3 +51,23 @@ test_that("stage_bundle drops .posit/ and renv build artifacts", {
   expect_false(dir.exists(file.path(staged, ".posit")))
   expect_false(dir.exists(file.path(staged, "renv", "library")))
 })
+
+test_that("stage_bundle copies R/render.R and R/icons.R into the bundle", {
+  # Build a fake configurator project layout in tmp
+  config_root <- tempfile("configurator-")
+  dir.create(file.path(config_root, "dashboard_template"), recursive = TRUE)
+  dir.create(file.path(config_root, "R"))
+  writeLines("---\ntitle: x\n---", file.path(config_root, "dashboard_template", "index.qmd"))
+  writeLines("# render", file.path(config_root, "R", "render.R"))
+  writeLines("# icons",  file.path(config_root, "R", "icons.R"))
+
+  # Run stage_bundle from the configurator root so the relative R/ path resolves
+  old_wd <- setwd(config_root); on.exit(setwd(old_wd), add = TRUE)
+  staged <- stage_bundle(template_dir = "dashboard_template",
+                         config = list(title = "T"))
+  on.exit(unlink(staged, recursive = TRUE), add = TRUE)
+
+  expect_true(file.exists(file.path(staged, "render.R")))
+  expect_true(file.exists(file.path(staged, "icons.R")))
+  expect_true(file.exists(file.path(staged, "index.qmd")))
+})
