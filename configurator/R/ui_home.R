@@ -77,7 +77,9 @@
     ),
     shiny::tags$div(class = "flex-grow-1",
       shiny::tags$div(class = "d-flex align-items-baseline gap-3 flex-wrap",
-        shiny::tags$div(class = "fw-medium", title),
+        shiny::tags$a(href = open_url, target = "_blank",
+                      class = "fw-medium text-decoration-none",
+                      title),
         shiny::actionLink(paste0("copy_", guid),
           shiny::tagList(.clipboard_icon(), "Share this collection"),
           class = "small text-muted")
@@ -92,10 +94,7 @@
     ),
     shiny::tags$div(class = "d-flex gap-2",
       shiny::actionButton(paste0("edit_", guid), "Edit",
-                          class = "btn-sm btn-primary"),
-      shiny::tags$a(href = open_url, target = "_blank",
-                    class = "btn btn-sm btn-outline-secondary",
-                    "Open")
+                          class = "btn-outline-secondary btn-compact")
     )
   )
 }
@@ -107,7 +106,7 @@ home_view <- function(collections, connect_server = "",
       shiny::tags$div(class = "d-flex align-items-center justify-content-between mb-4",
         shiny::tags$h1(class = "h3 mb-0", "My Content Collections"),
         shiny::actionButton("new_collection", "+ New collection",
-                            class = "btn-primary")
+                            class = "btn-primary btn-compact")
       ),
       if (length(collections) == 0) {
         shiny::tags$div(class = "text-center text-muted py-5",
