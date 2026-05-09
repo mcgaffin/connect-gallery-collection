@@ -13,7 +13,7 @@ search_content <- function(connect_server, connect_api_key, query) {
   tryCatch({
     resp <- api_request(connect_server, connect_api_key, "/__api__/v1/search/content") |>
       httr2::req_url_query(
-        q = paste("published:true", query),
+        q = paste("published:true locked:false", query),
         include = "owner",
         page_size = 20
       ) |>
@@ -97,7 +97,7 @@ fetch_my_collections <- function(connect_server, connect_api_key) {
   tryCatch({
     resp <- api_request(connect_server, connect_api_key, "/__api__/v1/search/content") |>
       httr2::req_url_query(
-        q = paste("published:true", "owner:@me", COLLECTION_NAME_MARKER),
+        q = paste("published:true locked:false", "owner:@me", COLLECTION_NAME_MARKER),
         include = "owner",
         page_size = 100
       ) |>
@@ -131,7 +131,7 @@ fetch_content_by_tag <- function(connect_server, connect_api_key, tag_name) {
   tryCatch({
     resp <- api_request(connect_server, connect_api_key, "/__api__/v1/search/content") |>
       httr2::req_url_query(
-        q = paste0("published:true tag:", tag_name),
+        q = paste0("published:true locked:false tag:", tag_name),
         include = "owner",
         page_size = 100
       ) |>

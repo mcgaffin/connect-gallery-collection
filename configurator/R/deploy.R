@@ -44,6 +44,13 @@ stage_bundle <- function(template_dir, config) {
     }
   }
 
+  # Copy www/icons/ -> icons/ so build_collection_html's <img src="icons/...">
+  # resolves at render time. embed-resources: true inlines them as base64.
+  icons_src <- file.path("www", "icons")
+  if (dir.exists(icons_src)) {
+    file.copy(icons_src, staged, recursive = TRUE)
+  }
+
   jsonlite::write_json(
     config,
     file.path(staged, "collection.json"),

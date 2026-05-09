@@ -56,7 +56,7 @@ fetch_content_by_tag <- function(tag_name) {
     resp <- request(paste0(connect_server, "/__api__/v1/search/content")) |>
       req_headers(Authorization = paste("Key", connect_api_key)) |>
       req_url_query(
-        q = paste0("published:true tag:", tag_name),
+        q = paste0("published:true locked:false tag:", tag_name),
         include = "owner",
         page_size = 100
       ) |>

@@ -5,10 +5,50 @@ test_that("home_view shows the New collection button", {
   expect_match(html, "New collection",      fixed = TRUE)
 })
 
+test_that("home_view shows a beta pill next to the title", {
+  ui <- home_view(collections = list())
+  html <- as.character(ui)
+  expect_match(html, ">beta</span>", fixed = TRUE)
+  # Pill sits between the title and the New collection button.
+  title_pos  <- regexpr("My Content Collections", html, fixed = TRUE)
+  pill_pos   <- regexpr(">beta</span>",           html, fixed = TRUE)
+  button_pos <- regexpr('id="new_collection"',    html, fixed = TRUE)
+  expect_true(title_pos < pill_pos)
+  expect_true(pill_pos < button_pos)
+})
+
 test_that("home_view shows the empty-state when there are no collections", {
   ui <- home_view(collections = list())
   html <- as.character(ui)
   expect_match(html, "haven't created any collections", fixed = TRUE)
+})
+
+test_that("home_view renders the beta callout above the collection list", {
+  ui <- home_view(collections = list())
+  html <- as.character(ui)
+  expect_match(html, "experimental feature", fixed = TRUE)
+  expect_match(html, "Posit Community",      fixed = TRUE)
+  # Callout sits between the heading row and the empty/list area.
+  heading_pos <- regexpr("My Content Collections", html, fixed = TRUE)
+  callout_pos <- regexpr("experimental feature",  html, fixed = TRUE)
+  list_pos    <- regexpr("haven't created any collections",
+                         html, fixed = TRUE)
+  expect_true(heading_pos < callout_pos)
+  expect_true(callout_pos < list_pos)
+})
+
+test_that("home_view renders 'Last published' with date and time", {
+  collections <- list(
+    list(guid = "g1", title = "Coll A",
+         last_deployed_time = "2026-03-31T14:54:23Z")
+  )
+  ui <- home_view(collections = collections)
+  html <- as.character(ui)
+  expect_match(html, "Last published:", fixed = TRUE)
+  # Format: M/D/YY H:MM(am|pm); exact hour depends on local TZ.
+  expect_match(html,
+    "[0-9]{1,2}/[0-9]{1,2}/[0-9]{2} [0-9]{1,2}:[0-9]{2}(am|pm)",
+    perl = TRUE)
 })
 
 test_that("home_view renders one row per collection", {
@@ -24,15 +64,17 @@ test_that("home_view renders one row per collection", {
   expect_match(html, 'id="edit_g2"', fixed = TRUE)
 })
 
-test_that("home_view renders an Open link per row pointing at the deployed URL", {
+test_that("home_view renders the title as a link pointing at the deployed URL", {
   collections <- list(
     list(guid = "g1", title = "Coll A", last_deployed_time = "2026-01-01T00:00:00Z")
   )
   ui <- home_view(collections = collections,
                    connect_server = "https://connect.example.com")
   html <- as.character(ui)
-  expect_match(html, ">Open</a>", fixed = TRUE)
   expect_match(html, 'href="https://connect.example.com/content/g1/"', fixed = TRUE)
+  expect_match(html, ">Coll A</a>", fixed = TRUE)
+  # The standalone Open button is gone.
+  expect_no_match(html, ">Open</a>")
 })
 
 test_that("home_view renders a Share-this-collection link with copy_<guid> id", {

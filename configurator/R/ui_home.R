@@ -1,9 +1,3 @@
-.format_home_date <- function(dt) {
-  if (is.null(dt) || !nzchar(dt)) return("")
-  d <- tryCatch(as.Date(dt), error = function(e) NA)
-  if (is.na(d)) "" else format(d, "%b %d, %Y")
-}
-
 # Truncate text after `max_chars` characters with a single-character ellipsis.
 # Strips any HTML first so descriptions saved with stray markup display
 # cleanly here on the home page.
@@ -56,7 +50,7 @@
 .home_row <- function(coll, connect_server = "", meta = NULL) {
   guid  <- coll$guid %||% ""
   title <- coll$title %||% coll$name %||% guid
-  date  <- .format_home_date(coll$last_deployed_time)
+  date  <- .format_datetime(coll$last_deployed_time)
   open_url <- paste0(connect_server %||% "", "/content/", guid, "/")
   details <- .home_details_text(meta)
   raw_desc <- if (!is.null(meta) && nzchar(meta$description %||% "")) {
@@ -77,7 +71,9 @@
     ),
     shiny::tags$div(class = "flex-grow-1",
       shiny::tags$div(class = "d-flex align-items-baseline gap-3 flex-wrap",
-        shiny::tags$div(class = "fw-medium", title),
+        shiny::tags$a(href = open_url, target = "_blank",
+                      class = "fw-medium text-decoration-none",
+                      title),
         shiny::actionLink(paste0("copy_", guid),
           shiny::tagList(.clipboard_icon(), "Share this collection"),
           class = "small text-muted")
@@ -88,14 +84,31 @@
         shiny::tags$div(class = "text-muted small", details),
       if (nzchar(date))
         shiny::tags$div(class = "text-muted small",
-                        paste("Last published:", date))
+                        shiny::HTML(paste("Last published:", date)))
     ),
     shiny::tags$div(class = "d-flex gap-2",
       shiny::actionButton(paste0("edit_", guid), "Edit",
-                          class = "btn-sm btn-primary"),
-      shiny::tags$a(href = open_url, target = "_blank",
-                    class = "btn btn-sm btn-outline-secondary",
-                    "Open")
+                          class = "btn-outline-secondary btn-compact")
+    )
+  )
+}
+
+.beta_callout <- function() {
+  shiny::tags$div(
+    class = "alert alert-secondary",
+    style = "background-color:#eef2ff; color:#3730a3; border-color:#c7d2fe;",
+    shiny::tags$div(class = "fw-medium",
+                    "Collections is an experimental feature"),
+    shiny::tags$div(class = "small mt-1",
+                    "While in beta, please note these limits:"),
+    shiny::tags$ul(class = "small mb-2 mt-1",
+      shiny::tags$li("Limited theming options"),
+      shiny::tags$li("Sharing a collection only shares the collection itself — recipients still need access to each item inside it")
+    ),
+    shiny::tags$div(class = "small",
+      "Have feedback? ",
+      shiny::tags$a(href = "https://forum.posit.co/", target = "_blank",
+                    class = "alert-link", "Tell us on Posit Community ↗")
     )
   )
 }
@@ -105,10 +118,20 @@ home_view <- function(collections, connect_server = "",
   shiny::tagList(
     shiny::tags$div(class = "container py-4",
       shiny::tags$div(class = "d-flex align-items-center justify-content-between mb-4",
-        shiny::tags$h1(class = "h3 mb-0", "My Content Collections"),
+        shiny::tags$div(class = "d-flex align-items-center",
+          shiny::tags$h1(class = "h3 mb-0", "My Content Collections"),
+          shiny::tags$span(class = "badge ms-3",
+            style = paste("background-color: #72994e;",
+                          "color: #fff;",
+                          "font-weight: normal;",
+                          "font-size: 14px;", 
+                          "border-radius: 8px;"),
+            "beta")
+        ),
         shiny::actionButton("new_collection", "+ New collection",
-                            class = "btn-primary")
+                            class = "btn-primary btn-compact")
       ),
+      .beta_callout(),
       if (length(collections) == 0) {
         shiny::tags$div(class = "text-center text-muted py-5",
           style = "border:1px dashed #ced4da; border-radius:0.5rem;",

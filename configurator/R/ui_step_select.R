@@ -1,29 +1,40 @@
-.beta_callout <- function() {
-  shiny::tags$div(
-    class = "alert alert-secondary",
-    style = "background-color:#eef2ff; color:#3730a3; border-color:#c7d2fe;",
-    shiny::tags$div(class = "fw-medium",
-                    "Collections is an experimental feature"),
-    shiny::tags$div(class = "small mt-1",
-                    "While in beta, please note these limits:"),
-    shiny::tags$ul(class = "small mb-2 mt-1",
-      shiny::tags$li("Limited theming options"),
-      shiny::tags$li("Sharing a collection only shares the collection itself — recipients still need access to each item inside it")
-    ),
-    shiny::tags$div(class = "small",
-      "Have feedback? ",
-      shiny::tags$a(href = "https://forum.posit.co/", target = "_blank",
-                    class = "alert-link", "Tell us on Posit Community ↗")
-    )
+# Try Connect's thumbnail (/content/<guid>/__thumbnail__); on 404 the
+# <img onerror> swaps in the content-type icon. Shiny serves www/ at the
+# root, so the icons/<file>.svg fallback path resolves in this app.
+.thumb_or_icon_img <- function(guid, app_mode, connect_server, size = "44") {
+  fallback <- content_icon_path(app_mode)
+  src <- if (nzchar(guid) && nzchar(connect_server %||% "")) {
+    paste0(sub("/$", "", connect_server), "/content/", guid, "/__thumbnail__")
+  } else {
+    fallback
+  }
+  shiny::tags$img(
+    src = src, width = size, height = size,
+    class = "rounded",
+    style = "flex-shrink:0; object-fit:cover;",
+    alt = "",
+    onerror = sprintf("this.onerror=null;this.src='%s';", fallback)
   )
 }
 
-.result_row <- function(item, is_selected) {
+# Builds a "Type · Owner · M/D/YY H:MMam" meta line, dropping pieces that
+# aren't available so a row with just app_mode still renders cleanly.
+.row_meta <- function(item) {
+  parts <- c(
+    if (nzchar(content_type_label(item$app_mode %||% "")))
+      content_type_label(item$app_mode %||% "") else NULL,
+    if (nzchar(.owner_name(item)))                    .owner_name(item) else NULL,
+    if (nzchar(.format_datetime(item$last_deployed_time)))
+      .format_datetime(item$last_deployed_time) else NULL
+  )
+  paste(parts, collapse = " · ")
+}
+
+.result_row <- function(item, is_selected, connect_server = "") {
   guid  <- item$guid %||% ""
   title <- item$title %||% item$name %||% "Untitled"
   mode  <- item$app_mode %||% ""
-  icon  <- content_icon_path(mode)
-  label <- content_type_label(mode)
+  meta  <- .row_meta(item)
   # Use an actionButton so clicks fire as counter events. Stateful inputs
   # (raw checkboxes) misfire when the modal re-renders and the DOM rebinds —
   # they would silently remove guids on subtab switches.
@@ -32,33 +43,30 @@
     shiny::tagList(
       shiny::tags$span(class = paste("row-check",
                                      if (is_selected) "checked" else "")),
-      shiny::tags$img(src = icon, width = "44", height = "44",
-                      style = "flex-shrink:0;"),
+      .thumb_or_icon_img(guid, mode, connect_server),
       shiny::tags$div(class = "flex-grow-1 row-info",
         shiny::tags$div(class = "fw-medium", title),
-        shiny::tags$div(class = "text-muted small", label)
+        shiny::tags$div(class = "text-muted small", shiny::HTML(meta))
       )
     ),
     class = paste("row-toggle", if (is_selected) "selected" else "")
   )
 }
 
-# A row in the "Selected" subtab. Shows the same icon+title+type as a
+# A row in the "Selected" subtab. Shows the same icon+title+meta as a
 # result row, plus an inline Remove button that drops the item from
 # wizard_state$guids.
-.selected_row <- function(item) {
+.selected_row <- function(item, connect_server = "") {
   guid  <- item$guid %||% ""
   title <- item$title %||% item$name %||% "Untitled"
   mode  <- item$app_mode %||% ""
-  icon  <- content_icon_path(mode)
-  label <- content_type_label(mode)
+  meta  <- .row_meta(item)
   shiny::tags$div(
     class = "d-flex align-items-center gap-3 py-2 px-3 border-top selected-row",
-    shiny::tags$img(src = icon, width = "44", height = "44",
-                    style = "flex-shrink:0;"),
+    .thumb_or_icon_img(guid, mode, connect_server),
     shiny::tags$div(class = "flex-grow-1 row-info",
       shiny::tags$div(class = "fw-medium", title),
-      shiny::tags$div(class = "text-muted small", label)
+      shiny::tags$div(class = "text-muted small", shiny::HTML(meta))
     ),
     shiny::actionButton(paste0("remove_", guid), "Remove",
                         class = "btn-sm btn-outline-danger")
@@ -96,7 +104,8 @@
 }
 
 step_select_ui <- function(state, search_query, search_results, all_tags,
-                           subtab = "results", selected_items = list()) {
+                           subtab = "results", selected_items = list(),
+                           connect_server = "") {
   source_type <- state$source_type %||% "manual"
   selected_guids <- state$guids %||% character(0)
 
@@ -132,7 +141,8 @@ step_select_ui <- function(state, search_query, search_results, all_tags,
         ),
         shiny::tags$div(class = "result-list",
           lapply(search_results, function(item) {
-            .result_row(item, (item$guid %||% "") %in% selected_guids)
+            .result_row(item, (item$guid %||% "") %in% selected_guids,
+                        connect_server = connect_server)
           })
         )
       )
@@ -151,7 +161,7 @@ step_select_ui <- function(state, search_query, search_results, all_tags,
     rows <- lapply(selected_guids, function(g) {
       item <- selected_items[[g]] %||% list(guid = g, title = g,
                                              app_mode = "unknown")
-      .selected_row(item)
+      .selected_row(item, connect_server = connect_server)
     })
     shiny::tags$div(class = "result-list border-top",
       do.call(shiny::tagList, rows)
@@ -185,7 +195,6 @@ step_select_ui <- function(state, search_query, search_results, all_tags,
 
   shiny::tagList(
     shiny::tags$div(class = "wizard-step-body",
-      .beta_callout(),
       toggles_row,
       if (identical(source_type, "manual")) manual_body else tag_body
     )

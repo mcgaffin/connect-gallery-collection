@@ -8,11 +8,76 @@ THEME_COLORS <- list(
 )
 
 # Internal helpers
-.format_date <- function(dt) {
+# Returns HTML: <time datetime="ISO">FALLBACK</time>. The fallback text is
+# formatted server-side in the server's local TZ; a small JS snippet
+# (DATETIME_LOCALIZER_JS, injected in app.R and into the rendered HTML)
+# rewrites the visible text in the viewer's browser TZ + locale on load.
+# Returning HTML means callers must render it via shiny::HTML() / raw HTML.
+.format_datetime <- function(dt) {
   if (is.null(dt) || !nzchar(dt)) return("")
-  d <- tryCatch(as.Date(dt), error = function(e) NA)
-  if (is.na(d)) "" else format(d, "%m/%d/%Y")
+  parsed <- tryCatch(
+    as.POSIXct(sub("\\.\\d+", "", dt),
+               format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    error = function(e) NA
+  )
+  if (is.na(parsed)) return("")
+  s <- format(parsed, "%m/%d/%y %I:%M%p", tz = "")
+  s <- sub("^0(\\d/)",  "\\1",  s)   # leading 0 on month
+  s <- sub("/0(\\d/)",  "/\\1", s)   # leading 0 on day
+  s <- sub(" 0(\\d:)",  " \\1", s)   # leading 0 on hour
+  fallback <- sub("AM$", "am", sub("PM$", "pm", s))
+  iso <- format(parsed, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  sprintf('<time datetime="%s">%s</time>',
+          htmltools::htmlEscape(iso, attribute = TRUE),
+          htmltools::htmlEscape(fallback))
 }
+
+# Client-side script that rewrites every <time datetime="..."> in the page
+# using the viewer's browser TZ + locale. Injected once at the top level of
+# the Shiny UI and once at the top of each rendered Quarto collection HTML.
+DATETIME_LOCALIZER_JS <- '
+(function () {
+  function fmt(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString(undefined, {
+      year: "2-digit", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "2-digit"
+    });
+  }
+  function rewrite(root) {
+    var nodes = (root && root.querySelectorAll)
+      ? root.querySelectorAll("time[datetime]")
+      : document.querySelectorAll("time[datetime]");
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var t = fmt(el.getAttribute("datetime"));
+      if (t) el.textContent = t;
+    }
+  }
+  function init() {
+    rewrite();
+    if (window.Shiny) {
+      document.addEventListener("shiny:value", function (e) { rewrite(e.target); });
+      document.addEventListener("shiny:bound", function (e) { rewrite(e.target); });
+    }
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var added = muts[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            if (added[j].nodeType === 1) rewrite(added[j]);
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", init);
+  else
+    init();
+})();
+'
 
 .owner_name <- function(item) {
   owner <- item$owner
@@ -28,6 +93,29 @@ THEME_COLORS <- list(
 
 .content_url <- function(connect_server, guid) {
   paste0(connect_server %||% "", "/content/", guid, "/")
+}
+
+# Build a data: URI for the content-type icon SVG, so the <img onerror>
+# fallback works inside the deployed embed-resources HTML — Quarto's
+# inliner only scans `src=` attributes, not JS strings, so a relative
+# path inside onerror would not be inlined and the sibling icons/ folder
+# may not be served at runtime.
+.icon_data_uri <- function(app_mode) {
+  rel <- content_icon_path(app_mode)
+  candidates <- c(
+    rel,                                  # deployed bundle (icons/ sibling)
+    file.path("www", rel),                # cwd = configurator/
+    file.path("..", "..", "www", rel),    # cwd = configurator/tests/testthat/
+    file.path("..", "www", rel)           # cwd = configurator/tests/
+  )
+  for (p in candidates) {
+    if (file.exists(p)) {
+      bytes <- readBin(p, "raw", n = file.info(p)$size)
+      enc <- base64enc::base64encode(bytes)
+      return(paste0("data:image/svg+xml;base64,", enc))
+    }
+  }
+  rel  # last-resort: relative path; works in environments that serve icons/
 }
 
 # Connect content descriptions sometimes contain stray HTML (from prior
@@ -62,14 +150,17 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
 .collection-intro p { margin-bottom: 0.5rem; }
 .collection-intro a { color: %s; }
 .collection-count { font-size: 0.875rem; font-weight: 500; color: #666; margin-bottom: 1rem; }
-.collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
-.collection-card { display: flex; flex-direction: column; padding: 1rem; background: white; border: 1px solid %s; border-radius: 0.5rem; text-decoration: none; color: #111; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
+.collection-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+@media (max-width: 640px) { .collection-grid { grid-template-columns: 1fr; } }
+.collection-card { display: flex; flex-direction: column; padding: 1.125rem 1.25rem; background: white; border: 1px solid %s; border-radius: 0.75rem; text-decoration: none; color: #111; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
 .collection-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: %s; }
-.collection-card__title { font-size: 0.9375rem; font-weight: 600; color: %s; }
-.collection-card__description { margin-top: 0.375rem; font-size: 0.8125rem; color: #666; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
-.collection-card__meta { margin-top: 0.75rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: #999; }
-.collection-card__type { background: %s; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.6875rem; }
-.collection-card__owner { font-size: 0.75rem; color: #999; }
+.collection-card__header { display: flex; align-items: center; gap: 0.625rem; }
+.collection-card__icon { width: 48px; height: 48px; flex-shrink: 0; object-fit: cover; border-radius: 4px; }
+.collection-card__title { font-size: 1rem; font-weight: 600; color: %s; }
+.collection-card__description { margin-top: 0.75rem; font-size: 0.875rem; color: #444; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+.collection-card__meta { margin-top: 0.875rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; color: #555; gap: 0.5rem; }
+.collection-card__byline { color: #555; }
+.collection-card__date { color: #555; white-space: nowrap; }
 #quarto-header, #quarto-footer, .quarto-title-block, #title-block-header { display: none !important; }
 /* Strip default styling from Quarto cell wrappers so empty cells (from the
    include:false setup chunk and from results:asis output containers) do not
@@ -84,10 +175,11 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
 .cell:empty, .cell-output:empty { display: none !important; }
 </style>',
     colors$bg, colors$border, colors$accent, colors$accent,
-    colors$border, colors$accent, colors$accent, colors$bg)
+    colors$border, colors$accent, colors$accent)
 
   parts <- character(0)
   parts <- c(parts, style_html)
+  parts <- c(parts, sprintf("<script>%s</script>", DATETIME_LOCALIZER_JS))
 
   # Header
   parts <- c(parts, '<div class="collection-header">')
@@ -122,23 +214,33 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
       description <- paste0(substr(description, 1, 120), "...")
     }
     app_mode <- item$app_mode %||% ""
-    date <- .format_date(item$last_deployed_time)
+    date <- .format_datetime(item$last_deployed_time)
     owner <- .owner_name(item)
     url <- .content_url(connect_server, guid)
     type <- content_type_label(app_mode)
+    icon_uri <- .icon_data_uri(app_mode)
+    thumb_src <- if (nzchar(guid) && nzchar(connect_server %||% "")) {
+      paste0(sub("/$", "", connect_server), "/content/", guid, "/__thumbnail__")
+    } else {
+      icon_uri
+    }
+    byline <- if (nzchar(owner)) paste(type, "·", owner) else type
 
     parts <- c(parts, sprintf(
       '<a class="collection-card" href="%s" target="_blank">
-         <div class="collection-card__title">%s</div>
+         <div class="collection-card__header">
+           <img class="collection-card__icon" src="%s" alt=""
+                onerror="this.onerror=null;this.src=\'%s\';">
+           <div class="collection-card__title">%s</div>
+         </div>
          <div class="collection-card__description">%s</div>
          <div class="collection-card__meta">
-           <span class="collection-card__type">%s</span>
-           <span class="collection-card__owner">%s</span>
-           <span>%s</span>
+           <span class="collection-card__byline">%s</span>
+           <span class="collection-card__date">%s</span>
          </div>
        </a>',
-      esc(url), esc(title), esc(description),
-      esc(type), esc(owner), esc(date)))
+      esc(url), esc(thumb_src), esc(icon_uri), esc(title), esc(description),
+      esc(byline), date))  # date is pre-rendered <time> HTML, do not escape
   }
 
   parts <- c(parts, '</div></div>')
