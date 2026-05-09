@@ -8,10 +8,22 @@ THEME_COLORS <- list(
 )
 
 # Internal helpers
-.format_date <- function(dt) {
+# Formats Connect's ISO 8601 last_deployed_time as local date+time, e.g.
+# "3/31/26 9:54am". Strips leading zeros on month/day/hour and lowercases
+# am/pm to match the design spec.
+.format_datetime <- function(dt) {
   if (is.null(dt) || !nzchar(dt)) return("")
-  d <- tryCatch(as.Date(dt), error = function(e) NA)
-  if (is.na(d)) "" else format(d, "%m/%d/%Y")
+  parsed <- tryCatch(
+    as.POSIXct(sub("\\.\\d+", "", dt),
+               format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
+    error = function(e) NA
+  )
+  if (is.na(parsed)) return("")
+  s <- format(parsed, "%m/%d/%y %I:%M%p", tz = "")
+  s <- sub("^0(\\d/)",  "\\1",  s)   # leading 0 on month
+  s <- sub("/0(\\d/)",  "/\\1", s)   # leading 0 on day
+  s <- sub(" 0(\\d:)",  " \\1", s)   # leading 0 on hour
+  sub("AM$", "am", sub("PM$", "pm", s))
 }
 
 .owner_name <- function(item) {
@@ -148,7 +160,7 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
       description <- paste0(substr(description, 1, 120), "...")
     }
     app_mode <- item$app_mode %||% ""
-    date <- .format_date(item$last_deployed_time)
+    date <- .format_datetime(item$last_deployed_time)
     owner <- .owner_name(item)
     url <- .content_url(connect_server, guid)
     type <- content_type_label(app_mode)

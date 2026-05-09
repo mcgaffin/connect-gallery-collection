@@ -1,9 +1,3 @@
-.format_home_date <- function(dt) {
-  if (is.null(dt) || !nzchar(dt)) return("")
-  d <- tryCatch(as.Date(dt), error = function(e) NA)
-  if (is.na(d)) "" else format(d, "%b %d, %Y")
-}
-
 # Truncate text after `max_chars` characters with a single-character ellipsis.
 # Strips any HTML first so descriptions saved with stray markup display
 # cleanly here on the home page.
@@ -56,7 +50,7 @@
 .home_row <- function(coll, connect_server = "", meta = NULL) {
   guid  <- coll$guid %||% ""
   title <- coll$title %||% coll$name %||% guid
-  date  <- .format_home_date(coll$last_deployed_time)
+  date  <- .format_datetime(coll$last_deployed_time)
   open_url <- paste0(connect_server %||% "", "/content/", guid, "/")
   details <- .home_details_text(meta)
   raw_desc <- if (!is.null(meta) && nzchar(meta$description %||% "")) {

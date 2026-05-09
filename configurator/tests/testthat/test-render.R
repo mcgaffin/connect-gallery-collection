@@ -97,6 +97,22 @@ test_that("build_collection_html strips a trailing slash from connect_server in 
     fixed = TRUE)
 })
 
+test_that("build_collection_html formats last_deployed_time as M/D/YY H:MMam/pm", {
+  cfg <- list(title = "T", description = "", intro_markdown = "",
+              theme = "minimal", source_type = "manual", guids = c("a"))
+  items <- list(
+    list(guid = "a", title = "Q", description = "",
+         app_mode = "quarto-static",
+         last_deployed_time = "2026-03-31T14:54:23Z")
+  )
+  html <- build_collection_html(cfg, items = items, theme_colors = THEME_COLORS)
+  # Format is M/D/YY H:MM(am|pm) — exact hour depends on local TZ at test
+  # time, so match the shape, not the value.
+  expect_match(html,
+    '"collection-card__date">[0-9]{1,2}/[0-9]{1,2}/[0-9]{2} [0-9]{1,2}:[0-9]{2}(am|pm)<',
+    perl = TRUE)
+})
+
 test_that("build_collection_html renders 'type · owner' as a single byline", {
   cfg <- list(title = "T", description = "", intro_markdown = "",
               theme = "minimal", source_type = "manual",

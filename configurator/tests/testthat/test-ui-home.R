@@ -37,6 +37,20 @@ test_that("home_view renders the beta callout above the collection list", {
   expect_true(callout_pos < list_pos)
 })
 
+test_that("home_view renders 'Last published' with date and time", {
+  collections <- list(
+    list(guid = "g1", title = "Coll A",
+         last_deployed_time = "2026-03-31T14:54:23Z")
+  )
+  ui <- home_view(collections = collections)
+  html <- as.character(ui)
+  expect_match(html, "Last published:", fixed = TRUE)
+  # Format: M/D/YY H:MM(am|pm); exact hour depends on local TZ.
+  expect_match(html,
+    "[0-9]{1,2}/[0-9]{1,2}/[0-9]{2} [0-9]{1,2}:[0-9]{2}(am|pm)",
+    perl = TRUE)
+})
+
 test_that("home_view renders one row per collection", {
   collections <- list(
     list(guid = "g1", title = "Coll A", last_deployed_time = "2026-01-01T00:00:00Z"),

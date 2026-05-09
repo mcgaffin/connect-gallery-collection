@@ -117,6 +117,40 @@ test_that("step_select_ui renders one row per result with checkbox and icon", {
   expect_match(html, 'id="select_all"', fixed = TRUE)
 })
 
+test_that("step_select_ui meta line shows type, owner, and date+time when available", {
+  results <- list(
+    list(guid = "g1", title = "First",
+         app_mode = "rmd-static",
+         owner = list(first_name = "David", last_name = "McGaffin"),
+         last_deployed_time = "2026-03-31T14:54:23Z")
+  )
+  ui <- step_select_ui(
+    state = list(source_type = "manual", source_tag = "",
+                 guids = character(0)),
+    search_query = "x", search_results = results, all_tags = list()
+  )
+  html <- as.character(ui)
+  expect_match(html, "R Markdown · David McGaffin · ", fixed = TRUE)
+  expect_match(html,
+    "[0-9]{1,2}/[0-9]{1,2}/[0-9]{2} [0-9]{1,2}:[0-9]{2}(am|pm)",
+    perl = TRUE)
+})
+
+test_that("step_select_ui meta line falls back to type when owner/date are missing", {
+  results <- list(
+    list(guid = "g1", title = "First", app_mode = "shiny")
+  )
+  ui <- step_select_ui(
+    state = list(source_type = "manual", source_tag = "",
+                 guids = character(0)),
+    search_query = "x", search_results = results, all_tags = list()
+  )
+  html <- as.character(ui)
+  # Just the type label, no trailing separator.
+  expect_match(html, ">Shiny<", fixed = TRUE)
+  expect_no_match(html, "Shiny ·", fixed = TRUE)
+})
+
 test_that("step_select_ui uses Connect __thumbnail__ URLs when connect_server is given", {
   results <- list(
     list(guid = "g1", title = "First", description = "",

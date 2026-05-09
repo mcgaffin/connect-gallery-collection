@@ -17,11 +17,24 @@
   )
 }
 
+# Builds a "Type · Owner · M/D/YY H:MMam" meta line, dropping pieces that
+# aren't available so a row with just app_mode still renders cleanly.
+.row_meta <- function(item) {
+  parts <- c(
+    if (nzchar(content_type_label(item$app_mode %||% "")))
+      content_type_label(item$app_mode %||% "") else NULL,
+    if (nzchar(.owner_name(item)))                    .owner_name(item) else NULL,
+    if (nzchar(.format_datetime(item$last_deployed_time)))
+      .format_datetime(item$last_deployed_time) else NULL
+  )
+  paste(parts, collapse = " · ")
+}
+
 .result_row <- function(item, is_selected, connect_server = "") {
   guid  <- item$guid %||% ""
   title <- item$title %||% item$name %||% "Untitled"
   mode  <- item$app_mode %||% ""
-  label <- content_type_label(mode)
+  meta  <- .row_meta(item)
   # Use an actionButton so clicks fire as counter events. Stateful inputs
   # (raw checkboxes) misfire when the modal re-renders and the DOM rebinds —
   # they would silently remove guids on subtab switches.
@@ -33,27 +46,27 @@
       .thumb_or_icon_img(guid, mode, connect_server),
       shiny::tags$div(class = "flex-grow-1 row-info",
         shiny::tags$div(class = "fw-medium", title),
-        shiny::tags$div(class = "text-muted small", label)
+        shiny::tags$div(class = "text-muted small", meta)
       )
     ),
     class = paste("row-toggle", if (is_selected) "selected" else "")
   )
 }
 
-# A row in the "Selected" subtab. Shows the same icon+title+type as a
+# A row in the "Selected" subtab. Shows the same icon+title+meta as a
 # result row, plus an inline Remove button that drops the item from
 # wizard_state$guids.
 .selected_row <- function(item, connect_server = "") {
   guid  <- item$guid %||% ""
   title <- item$title %||% item$name %||% "Untitled"
   mode  <- item$app_mode %||% ""
-  label <- content_type_label(mode)
+  meta  <- .row_meta(item)
   shiny::tags$div(
     class = "d-flex align-items-center gap-3 py-2 px-3 border-top selected-row",
     .thumb_or_icon_img(guid, mode, connect_server),
     shiny::tags$div(class = "flex-grow-1 row-info",
       shiny::tags$div(class = "fw-medium", title),
-      shiny::tags$div(class = "text-muted small", label)
+      shiny::tags$div(class = "text-muted small", meta)
     ),
     shiny::actionButton(paste0("remove_", guid), "Remove",
                         class = "btn-sm btn-outline-danger")
