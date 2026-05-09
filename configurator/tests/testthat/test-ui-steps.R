@@ -109,10 +109,31 @@ test_that("step_select_ui renders one row per result with checkbox and icon", {
   expect_match(html, "Second", fixed = TRUE)
   expect_match(html, "Quarto", fixed = TRUE)
   expect_match(html, "Shiny",  fixed = TRUE)
+  # Without a connect_server the primary src is the icon path; onerror
+  # also points at it (defensive).
   expect_match(html, "icons/quarto.svg", fixed = TRUE)
   expect_match(html, "icons/shiny.svg",  fixed = TRUE)
   # The "Select all" checkbox uses a fixed input id
   expect_match(html, 'id="select_all"', fixed = TRUE)
+})
+
+test_that("step_select_ui uses Connect __thumbnail__ URLs when connect_server is given", {
+  results <- list(
+    list(guid = "g1", title = "First", description = "",
+         app_mode = "quarto-static")
+  )
+  ui <- step_select_ui(
+    state = list(source_type = "manual", source_tag = "",
+                 guids = character(0)),
+    search_query = "x", search_results = results, all_tags = list(),
+    connect_server = "https://connect.example.com"
+  )
+  html <- as.character(ui)
+  expect_match(html,
+    'src="https://connect.example.com/content/g1/__thumbnail__"',
+    fixed = TRUE)
+  # onerror falls back to the content-type icon path (Shiny serves www/).
+  expect_match(html, "this.src=&#39;icons/quarto.svg&#39;", fixed = TRUE)
 })
 
 test_that("step_select_ui shows tag selector in tag mode", {

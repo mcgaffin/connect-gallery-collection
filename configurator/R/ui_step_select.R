@@ -1,8 +1,26 @@
-.result_row <- function(item, is_selected) {
+# Try Connect's thumbnail (/content/<guid>/__thumbnail__); on 404 the
+# <img onerror> swaps in the content-type icon. Shiny serves www/ at the
+# root, so the icons/<file>.svg fallback path resolves in this app.
+.thumb_or_icon_img <- function(guid, app_mode, connect_server, size = "44") {
+  fallback <- content_icon_path(app_mode)
+  src <- if (nzchar(guid) && nzchar(connect_server %||% "")) {
+    paste0(sub("/$", "", connect_server), "/content/", guid, "/__thumbnail__")
+  } else {
+    fallback
+  }
+  shiny::tags$img(
+    src = src, width = size, height = size,
+    class = "rounded",
+    style = "flex-shrink:0; object-fit:cover;",
+    alt = "",
+    onerror = sprintf("this.onerror=null;this.src='%s';", fallback)
+  )
+}
+
+.result_row <- function(item, is_selected, connect_server = "") {
   guid  <- item$guid %||% ""
   title <- item$title %||% item$name %||% "Untitled"
   mode  <- item$app_mode %||% ""
-  icon  <- content_icon_path(mode)
   label <- content_type_label(mode)
   # Use an actionButton so clicks fire as counter events. Stateful inputs
   # (raw checkboxes) misfire when the modal re-renders and the DOM rebinds —
@@ -12,8 +30,7 @@
     shiny::tagList(
       shiny::tags$span(class = paste("row-check",
                                      if (is_selected) "checked" else "")),
-      shiny::tags$img(src = icon, width = "44", height = "44",
-                      style = "flex-shrink:0;"),
+      .thumb_or_icon_img(guid, mode, connect_server),
       shiny::tags$div(class = "flex-grow-1 row-info",
         shiny::tags$div(class = "fw-medium", title),
         shiny::tags$div(class = "text-muted small", label)
@@ -26,16 +43,14 @@
 # A row in the "Selected" subtab. Shows the same icon+title+type as a
 # result row, plus an inline Remove button that drops the item from
 # wizard_state$guids.
-.selected_row <- function(item) {
+.selected_row <- function(item, connect_server = "") {
   guid  <- item$guid %||% ""
   title <- item$title %||% item$name %||% "Untitled"
   mode  <- item$app_mode %||% ""
-  icon  <- content_icon_path(mode)
   label <- content_type_label(mode)
   shiny::tags$div(
     class = "d-flex align-items-center gap-3 py-2 px-3 border-top selected-row",
-    shiny::tags$img(src = icon, width = "44", height = "44",
-                    style = "flex-shrink:0;"),
+    .thumb_or_icon_img(guid, mode, connect_server),
     shiny::tags$div(class = "flex-grow-1 row-info",
       shiny::tags$div(class = "fw-medium", title),
       shiny::tags$div(class = "text-muted small", label)
@@ -76,7 +91,8 @@
 }
 
 step_select_ui <- function(state, search_query, search_results, all_tags,
-                           subtab = "results", selected_items = list()) {
+                           subtab = "results", selected_items = list(),
+                           connect_server = "") {
   source_type <- state$source_type %||% "manual"
   selected_guids <- state$guids %||% character(0)
 
@@ -112,7 +128,8 @@ step_select_ui <- function(state, search_query, search_results, all_tags,
         ),
         shiny::tags$div(class = "result-list",
           lapply(search_results, function(item) {
-            .result_row(item, (item$guid %||% "") %in% selected_guids)
+            .result_row(item, (item$guid %||% "") %in% selected_guids,
+                        connect_server = connect_server)
           })
         )
       )
@@ -131,7 +148,7 @@ step_select_ui <- function(state, search_query, search_results, all_tags,
     rows <- lapply(selected_guids, function(g) {
       item <- selected_items[[g]] %||% list(guid = g, title = g,
                                              app_mode = "unknown")
-      .selected_row(item)
+      .selected_row(item, connect_server = connect_server)
     })
     shiny::tags$div(class = "result-list border-top",
       do.call(shiny::tagList, rows)

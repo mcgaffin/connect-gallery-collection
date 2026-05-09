@@ -30,6 +30,29 @@ THEME_COLORS <- list(
   paste0(connect_server %||% "", "/content/", guid, "/")
 }
 
+# Build a data: URI for the content-type icon SVG, so the <img onerror>
+# fallback works inside the deployed embed-resources HTML — Quarto's
+# inliner only scans `src=` attributes, not JS strings, so a relative
+# path inside onerror would not be inlined and the sibling icons/ folder
+# may not be served at runtime.
+.icon_data_uri <- function(app_mode) {
+  rel <- content_icon_path(app_mode)
+  candidates <- c(
+    rel,                                  # deployed bundle (icons/ sibling)
+    file.path("www", rel),                # cwd = configurator/
+    file.path("..", "..", "www", rel),    # cwd = configurator/tests/testthat/
+    file.path("..", "www", rel)           # cwd = configurator/tests/
+  )
+  for (p in candidates) {
+    if (file.exists(p)) {
+      bytes <- readBin(p, "raw", n = file.info(p)$size)
+      enc <- base64enc::base64encode(bytes)
+      return(paste0("data:image/svg+xml;base64,", enc))
+    }
+  }
+  rel  # last-resort: relative path; works in environments that serve icons/
+}
+
 # Connect content descriptions sometimes contain stray HTML (from prior
 # tooling, or copy-pasted markup). Strip tags so cards show plain text only.
 .strip_html <- function(text) {
@@ -67,7 +90,7 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
 .collection-card { display: flex; flex-direction: column; padding: 1.125rem 1.25rem; background: white; border: 1px solid %s; border-radius: 0.75rem; text-decoration: none; color: #111; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
 .collection-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: %s; }
 .collection-card__header { display: flex; align-items: center; gap: 0.625rem; }
-.collection-card__icon { width: 48px; height: 48px; flex-shrink: 0; }
+.collection-card__icon { width: 48px; height: 48px; flex-shrink: 0; object-fit: cover; border-radius: 4px; }
 .collection-card__title { font-size: 1rem; font-weight: 600; color: %s; }
 .collection-card__description { margin-top: 0.75rem; font-size: 0.875rem; color: #444; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
 .collection-card__meta { margin-top: 0.875rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; color: #555; gap: 0.5rem; }
@@ -129,13 +152,19 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
     owner <- .owner_name(item)
     url <- .content_url(connect_server, guid)
     type <- content_type_label(app_mode)
-    icon <- content_icon_path(app_mode)
+    icon_uri <- .icon_data_uri(app_mode)
+    thumb_src <- if (nzchar(guid) && nzchar(connect_server %||% "")) {
+      paste0(sub("/$", "", connect_server), "/content/", guid, "/__thumbnail__")
+    } else {
+      icon_uri
+    }
     byline <- if (nzchar(owner)) paste(type, "·", owner) else type
 
     parts <- c(parts, sprintf(
       '<a class="collection-card" href="%s" target="_blank">
          <div class="collection-card__header">
-           <img class="collection-card__icon" src="%s" alt="">
+           <img class="collection-card__icon" src="%s" alt=""
+                onerror="this.onerror=null;this.src=\'%s\';">
            <div class="collection-card__title">%s</div>
          </div>
          <div class="collection-card__description">%s</div>
@@ -144,7 +173,7 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
            <span class="collection-card__date">%s</span>
          </div>
        </a>',
-      esc(url), esc(icon), esc(title), esc(description),
+      esc(url), esc(thumb_src), esc(icon_uri), esc(title), esc(description),
       esc(byline), esc(date)))
   }
 

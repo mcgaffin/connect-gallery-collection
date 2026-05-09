@@ -61,7 +61,40 @@ test_that("build_collection_html renders an icon image per card from app_mode", 
   )
   html <- build_collection_html(cfg, items = items, theme_colors = THEME_COLORS)
   expect_match(html, 'class="collection-card__icon"', fixed = TRUE)
-  expect_match(html, 'src="icons/quarto.svg"',         fixed = TRUE)
+  # Without a connect_server, the primary src is the icon's data URI.
+  expect_match(html, "data:image/svg+xml;base64,", fixed = TRUE)
+})
+
+test_that("build_collection_html uses Connect's __thumbnail__ URL when connect_server is given", {
+  cfg <- list(title = "T", description = "", intro_markdown = "",
+              theme = "minimal", source_type = "manual",
+              guids = c("a"))
+  items <- list(
+    list(guid = "a", title = "Q", description = "",
+         app_mode = "quarto-static", last_deployed_time = "2026-01-01T00:00:00Z")
+  )
+  html <- build_collection_html(cfg, items = items, theme_colors = THEME_COLORS,
+                                 connect_server = "https://connect.example.com")
+  expect_match(html,
+    'src="https://connect.example.com/content/a/__thumbnail__"',
+    fixed = TRUE)
+  # onerror falls back to the icon data URI so the deployed embed-resources
+  # HTML still has a working fallback when the thumbnail 404s.
+  expect_match(html, "onerror=", fixed = TRUE)
+  expect_match(html, "data:image/svg+xml;base64,", fixed = TRUE)
+})
+
+test_that("build_collection_html strips a trailing slash from connect_server in the thumbnail URL", {
+  cfg <- list(title = "T", description = "", intro_markdown = "",
+              theme = "minimal", source_type = "manual", guids = c("a"))
+  items <- list(list(guid = "a", title = "Q", description = "",
+                     app_mode = "quarto-static",
+                     last_deployed_time = ""))
+  html <- build_collection_html(cfg, items = items, theme_colors = THEME_COLORS,
+                                 connect_server = "https://connect.example.com/")
+  expect_match(html,
+    'src="https://connect.example.com/content/a/__thumbnail__"',
+    fixed = TRUE)
 })
 
 test_that("build_collection_html renders 'type · owner' as a single byline", {
