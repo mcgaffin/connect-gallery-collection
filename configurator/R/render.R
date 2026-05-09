@@ -8,9 +8,11 @@ THEME_COLORS <- list(
 )
 
 # Internal helpers
-# Formats Connect's ISO 8601 last_deployed_time as local date+time, e.g.
-# "3/31/26 9:54am". Strips leading zeros on month/day/hour and lowercases
-# am/pm to match the design spec.
+# Returns HTML: <time datetime="ISO">FALLBACK</time>. The fallback text is
+# formatted server-side in the server's local TZ; a small JS snippet
+# (DATETIME_LOCALIZER_JS, injected in app.R and into the rendered HTML)
+# rewrites the visible text in the viewer's browser TZ + locale on load.
+# Returning HTML means callers must render it via shiny::HTML() / raw HTML.
 .format_datetime <- function(dt) {
   if (is.null(dt) || !nzchar(dt)) return("")
   parsed <- tryCatch(
@@ -23,8 +25,59 @@ THEME_COLORS <- list(
   s <- sub("^0(\\d/)",  "\\1",  s)   # leading 0 on month
   s <- sub("/0(\\d/)",  "/\\1", s)   # leading 0 on day
   s <- sub(" 0(\\d:)",  " \\1", s)   # leading 0 on hour
-  sub("AM$", "am", sub("PM$", "pm", s))
+  fallback <- sub("AM$", "am", sub("PM$", "pm", s))
+  iso <- format(parsed, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  sprintf('<time datetime="%s">%s</time>',
+          htmltools::htmlEscape(iso, attribute = TRUE),
+          htmltools::htmlEscape(fallback))
 }
+
+# Client-side script that rewrites every <time datetime="..."> in the page
+# using the viewer's browser TZ + locale. Injected once at the top level of
+# the Shiny UI and once at the top of each rendered Quarto collection HTML.
+DATETIME_LOCALIZER_JS <- '
+(function () {
+  function fmt(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleString(undefined, {
+      year: "2-digit", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "2-digit"
+    });
+  }
+  function rewrite(root) {
+    var nodes = (root && root.querySelectorAll)
+      ? root.querySelectorAll("time[datetime]")
+      : document.querySelectorAll("time[datetime]");
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var t = fmt(el.getAttribute("datetime"));
+      if (t) el.textContent = t;
+    }
+  }
+  function init() {
+    rewrite();
+    if (window.Shiny) {
+      document.addEventListener("shiny:value", function (e) { rewrite(e.target); });
+      document.addEventListener("shiny:bound", function (e) { rewrite(e.target); });
+    }
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var added = muts[i].addedNodes;
+          for (var j = 0; j < added.length; j++) {
+            if (added[j].nodeType === 1) rewrite(added[j]);
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", init);
+  else
+    init();
+})();
+'
 
 .owner_name <- function(item) {
   owner <- item$owner
@@ -126,6 +179,7 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
 
   parts <- character(0)
   parts <- c(parts, style_html)
+  parts <- c(parts, sprintf("<script>%s</script>", DATETIME_LOCALIZER_JS))
 
   # Header
   parts <- c(parts, '<div class="collection-header">')
@@ -186,7 +240,7 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
          </div>
        </a>',
       esc(url), esc(thumb_src), esc(icon_uri), esc(title), esc(description),
-      esc(byline), esc(date)))
+      esc(byline), date))  # date is pre-rendered <time> HTML, do not escape
   }
 
   parts <- c(parts, '</div></div>')

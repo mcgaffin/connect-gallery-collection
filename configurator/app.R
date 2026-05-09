@@ -28,6 +28,7 @@ ui <- page_fillable(
   theme = bs_theme(preset = "shiny"),
   shinyjs::useShinyjs(),
   tags$head(
+    tags$script(HTML(DATETIME_LOCALIZER_JS)),
     tags$style("
       @media (prefers-reduced-motion: reduce) { .spinner-border { animation: none; } }
 

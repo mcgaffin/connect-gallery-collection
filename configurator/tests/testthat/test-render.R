@@ -97,7 +97,7 @@ test_that("build_collection_html strips a trailing slash from connect_server in 
     fixed = TRUE)
 })
 
-test_that("build_collection_html formats last_deployed_time as M/D/YY H:MMam/pm", {
+test_that("build_collection_html emits a <time> element with ISO datetime; viewer JS reformats locally", {
   cfg <- list(title = "T", description = "", intro_markdown = "",
               theme = "minimal", source_type = "manual", guids = c("a"))
   items <- list(
@@ -106,11 +106,11 @@ test_that("build_collection_html formats last_deployed_time as M/D/YY H:MMam/pm"
          last_deployed_time = "2026-03-31T14:54:23Z")
   )
   html <- build_collection_html(cfg, items = items, theme_colors = THEME_COLORS)
-  # Format is M/D/YY H:MM(am|pm) — exact hour depends on local TZ at test
-  # time, so match the shape, not the value.
-  expect_match(html,
-    '"collection-card__date">[0-9]{1,2}/[0-9]{1,2}/[0-9]{2} [0-9]{1,2}:[0-9]{2}(am|pm)<',
-    perl = TRUE)
+  # The viewer's browser is responsible for the final TZ + locale display;
+  # we just need the <time> tag with an ISO datetime to be present.
+  expect_match(html, '<time datetime="2026-03-31T14:54:23Z">', fixed = TRUE)
+  # And the localizer script must be in the rendered output.
+  expect_match(html, "toLocaleString", fixed = TRUE)
 })
 
 test_that("build_collection_html renders 'type · owner' as a single byline", {

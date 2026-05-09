@@ -84,7 +84,7 @@
         shiny::tags$div(class = "text-muted small", details),
       if (nzchar(date))
         shiny::tags$div(class = "text-muted small",
-                        paste("Last published:", date))
+                        shiny::HTML(paste("Last published:", date)))
     ),
     shiny::tags$div(class = "d-flex gap-2",
       shiny::actionButton(paste0("edit_", guid), "Edit",

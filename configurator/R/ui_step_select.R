@@ -46,7 +46,7 @@
       .thumb_or_icon_img(guid, mode, connect_server),
       shiny::tags$div(class = "flex-grow-1 row-info",
         shiny::tags$div(class = "fw-medium", title),
-        shiny::tags$div(class = "text-muted small", meta)
+        shiny::tags$div(class = "text-muted small", shiny::HTML(meta))
       )
     ),
     class = paste("row-toggle", if (is_selected) "selected" else "")
@@ -66,7 +66,7 @@
     .thumb_or_icon_img(guid, mode, connect_server),
     shiny::tags$div(class = "flex-grow-1 row-info",
       shiny::tags$div(class = "fw-medium", title),
-      shiny::tags$div(class = "text-muted small", meta)
+      shiny::tags$div(class = "text-muted small", shiny::HTML(meta))
     ),
     shiny::actionButton(paste0("remove_", guid), "Remove",
                         class = "btn-sm btn-outline-danger")
