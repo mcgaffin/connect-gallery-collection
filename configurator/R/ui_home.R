@@ -99,15 +99,44 @@
   )
 }
 
+.beta_callout <- function() {
+  shiny::tags$div(
+    class = "alert alert-secondary",
+    style = "background-color:#eef2ff; color:#3730a3; border-color:#c7d2fe;",
+    shiny::tags$div(class = "fw-medium",
+                    "Collections is an experimental feature"),
+    shiny::tags$div(class = "small mt-1",
+                    "While in beta, please note these limits:"),
+    shiny::tags$ul(class = "small mb-2 mt-1",
+      shiny::tags$li("Limited theming options"),
+      shiny::tags$li("Sharing a collection only shares the collection itself — recipients still need access to each item inside it")
+    ),
+    shiny::tags$div(class = "small",
+      "Have feedback? ",
+      shiny::tags$a(href = "https://forum.posit.co/", target = "_blank",
+                    class = "alert-link", "Tell us on Posit Community ↗")
+    )
+  )
+}
+
 home_view <- function(collections, connect_server = "",
                      collection_meta = list()) {
   shiny::tagList(
     shiny::tags$div(class = "container py-4",
       shiny::tags$div(class = "d-flex align-items-center justify-content-between mb-4",
-        shiny::tags$h1(class = "h3 mb-0", "My Content Collections"),
+        shiny::tags$div(class = "d-flex align-items-center",
+          shiny::tags$h1(class = "h3 mb-0", "My Content Collections"),
+          shiny::tags$span(class = "badge ms-3",
+            style = paste("background-color: #72994e;",
+                          "color: #fff;",
+                          "font-weight: normal;",
+                          "border-radius: 8px;"),
+            "beta")
+        ),
         shiny::actionButton("new_collection", "+ New collection",
                             class = "btn-primary btn-compact")
       ),
+      .beta_callout(),
       if (length(collections) == 0) {
         shiny::tags$div(class = "text-center text-muted py-5",
           style = "border:1px dashed #ced4da; border-radius:0.5rem;",

@@ -1,23 +1,3 @@
-.beta_callout <- function() {
-  shiny::tags$div(
-    class = "alert alert-secondary",
-    style = "background-color:#eef2ff; color:#3730a3; border-color:#c7d2fe;",
-    shiny::tags$div(class = "fw-medium",
-                    "Collections is an experimental feature"),
-    shiny::tags$div(class = "small mt-1",
-                    "While in beta, please note these limits:"),
-    shiny::tags$ul(class = "small mb-2 mt-1",
-      shiny::tags$li("Limited theming options"),
-      shiny::tags$li("Sharing a collection only shares the collection itself — recipients still need access to each item inside it")
-    ),
-    shiny::tags$div(class = "small",
-      "Have feedback? ",
-      shiny::tags$a(href = "https://forum.posit.co/", target = "_blank",
-                    class = "alert-link", "Tell us on Posit Community ↗")
-    )
-  )
-}
-
 .result_row <- function(item, is_selected) {
   guid  <- item$guid %||% ""
   title <- item$title %||% item$name %||% "Untitled"
@@ -185,7 +165,6 @@ step_select_ui <- function(state, search_query, search_results, all_tags,
 
   shiny::tagList(
     shiny::tags$div(class = "wizard-step-body",
-      .beta_callout(),
       toggles_row,
       if (identical(source_type, "manual")) manual_body else tag_body
     )

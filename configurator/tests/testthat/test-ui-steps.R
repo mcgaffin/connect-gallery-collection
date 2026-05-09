@@ -35,7 +35,7 @@ test_that("step_theme_ui marks the selected theme with an aria pressed attribute
                perl = TRUE)
 })
 
-test_that("step_select_ui renders the source-type toggle and beta callout", {
+test_that("step_select_ui renders the source-type toggle (no beta callout)", {
   ui <- step_select_ui(
     state = list(source_type = "manual", source_tag = "",
                  guids = character(0)),
@@ -46,8 +46,8 @@ test_that("step_select_ui renders the source-type toggle and beta callout", {
   expect_match(html, 'id="source_type_tag"',    fixed = TRUE)
   expect_match(html, "Select content",          fixed = TRUE)
   expect_match(html, "Use a tag",               fixed = TRUE)
-  expect_match(html, "experimental feature",    fixed = TRUE)
-  expect_match(html, "Posit Community",         fixed = TRUE)
+  # Beta callout moved to the home page.
+  expect_no_match(html, "experimental feature")
 })
 
 test_that("step_select_ui shows the search/selected subtab nav with current count", {
