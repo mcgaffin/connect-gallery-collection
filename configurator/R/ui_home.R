@@ -130,6 +130,7 @@ home_view <- function(collections, connect_server = "",
             style = paste("background-color: #72994e;",
                           "color: #fff;",
                           "font-weight: normal;",
+                          "font-size: 14px;", 
                           "border-radius: 8px;"),
             "beta")
         ),
