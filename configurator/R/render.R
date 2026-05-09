@@ -62,14 +62,17 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
 .collection-intro p { margin-bottom: 0.5rem; }
 .collection-intro a { color: %s; }
 .collection-count { font-size: 0.875rem; font-weight: 500; color: #666; margin-bottom: 1rem; }
-.collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
-.collection-card { display: flex; flex-direction: column; padding: 1rem; background: white; border: 1px solid %s; border-radius: 0.5rem; text-decoration: none; color: #111; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
+.collection-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+@media (max-width: 640px) { .collection-grid { grid-template-columns: 1fr; } }
+.collection-card { display: flex; flex-direction: column; padding: 1.125rem 1.25rem; background: white; border: 1px solid %s; border-radius: 0.75rem; text-decoration: none; color: #111; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
 .collection-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: %s; }
-.collection-card__title { font-size: 0.9375rem; font-weight: 600; color: %s; }
-.collection-card__description { margin-top: 0.375rem; font-size: 0.8125rem; color: #666; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
-.collection-card__meta { margin-top: 0.75rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: #999; }
-.collection-card__type { background: %s; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.6875rem; }
-.collection-card__owner { font-size: 0.75rem; color: #999; }
+.collection-card__header { display: flex; align-items: center; gap: 0.625rem; }
+.collection-card__icon { width: 48px; height: 48px; flex-shrink: 0; }
+.collection-card__title { font-size: 1rem; font-weight: 600; color: %s; }
+.collection-card__description { margin-top: 0.75rem; font-size: 0.875rem; color: #444; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+.collection-card__meta { margin-top: 0.875rem; display: flex; justify-content: space-between; align-items: center; font-size: 0.8125rem; color: #555; gap: 0.5rem; }
+.collection-card__byline { color: #555; }
+.collection-card__date { color: #555; white-space: nowrap; }
 #quarto-header, #quarto-footer, .quarto-title-block, #title-block-header { display: none !important; }
 /* Strip default styling from Quarto cell wrappers so empty cells (from the
    include:false setup chunk and from results:asis output containers) do not
@@ -84,7 +87,7 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
 .cell:empty, .cell-output:empty { display: none !important; }
 </style>',
     colors$bg, colors$border, colors$accent, colors$accent,
-    colors$border, colors$accent, colors$accent, colors$bg)
+    colors$border, colors$accent, colors$accent)
 
   parts <- character(0)
   parts <- c(parts, style_html)
@@ -126,19 +129,23 @@ body { background-color: %s; font-family: -apple-system, BlinkMacSystemFont, "Se
     owner <- .owner_name(item)
     url <- .content_url(connect_server, guid)
     type <- content_type_label(app_mode)
+    icon <- content_icon_path(app_mode)
+    byline <- if (nzchar(owner)) paste(type, "·", owner) else type
 
     parts <- c(parts, sprintf(
       '<a class="collection-card" href="%s" target="_blank">
-         <div class="collection-card__title">%s</div>
+         <div class="collection-card__header">
+           <img class="collection-card__icon" src="%s" alt="">
+           <div class="collection-card__title">%s</div>
+         </div>
          <div class="collection-card__description">%s</div>
          <div class="collection-card__meta">
-           <span class="collection-card__type">%s</span>
-           <span class="collection-card__owner">%s</span>
-           <span>%s</span>
+           <span class="collection-card__byline">%s</span>
+           <span class="collection-card__date">%s</span>
          </div>
        </a>',
-      esc(url), esc(title), esc(description),
-      esc(type), esc(owner), esc(date)))
+      esc(url), esc(icon), esc(title), esc(description),
+      esc(byline), esc(date)))
   }
 
   parts <- c(parts, '</div></div>')

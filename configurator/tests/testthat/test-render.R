@@ -51,6 +51,47 @@ test_that("build_collection_html renders intro markdown when present", {
   expect_match(html, "Hello", fixed = TRUE)
 })
 
+test_that("build_collection_html renders an icon image per card from app_mode", {
+  cfg <- list(title = "T", description = "", intro_markdown = "",
+              theme = "minimal", source_type = "manual",
+              guids = c("a"))
+  items <- list(
+    list(guid = "a", title = "Q", description = "",
+         app_mode = "quarto-static", last_deployed_time = "2026-01-01T00:00:00Z")
+  )
+  html <- build_collection_html(cfg, items = items, theme_colors = THEME_COLORS)
+  expect_match(html, 'class="collection-card__icon"', fixed = TRUE)
+  expect_match(html, 'src="icons/quarto.svg"',         fixed = TRUE)
+})
+
+test_that("build_collection_html renders 'type · owner' as a single byline", {
+  cfg <- list(title = "T", description = "", intro_markdown = "",
+              theme = "minimal", source_type = "manual",
+              guids = c("a"))
+  items <- list(
+    list(guid = "a", title = "Q", description = "",
+         app_mode = "quarto-static", last_deployed_time = "2026-01-23T00:00:00Z",
+         owner = list(first_name = "Admin", last_name = "McAdmin"))
+  )
+  html <- build_collection_html(cfg, items = items, theme_colors = THEME_COLORS)
+  expect_match(html, "Quarto · Admin McAdmin", fixed = TRUE)
+  # The old type-badge span is gone.
+  expect_no_match(html, "collection-card__type")
+})
+
+test_that("build_collection_html omits the separator when there is no owner", {
+  cfg <- list(title = "T", description = "", intro_markdown = "",
+              theme = "minimal", source_type = "manual",
+              guids = c("a"))
+  items <- list(
+    list(guid = "a", title = "Q", description = "",
+         app_mode = "quarto-static", last_deployed_time = "")
+  )
+  html <- build_collection_html(cfg, items = items, theme_colors = THEME_COLORS)
+  expect_no_match(html, "Quarto ·")
+  expect_match(html, ">Quarto<",  fixed = TRUE)
+})
+
 test_that("build_collection_html applies theme background color", {
   cfg <- list(title = "T", description = "", intro_markdown = "",
               theme = "warm", source_type = "manual", guids = character(0))

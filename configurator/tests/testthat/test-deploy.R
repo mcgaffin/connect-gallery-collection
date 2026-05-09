@@ -71,3 +71,24 @@ test_that("stage_bundle copies R/render.R and R/icons.R into the bundle", {
   expect_true(file.exists(file.path(staged, "icons.R")))
   expect_true(file.exists(file.path(staged, "index.qmd")))
 })
+
+test_that("stage_bundle copies www/icons/ into the bundle so cards can reference them", {
+  config_root <- tempfile("configurator-")
+  dir.create(file.path(config_root, "dashboard_template"), recursive = TRUE)
+  dir.create(file.path(config_root, "R"))
+  dir.create(file.path(config_root, "www", "icons"), recursive = TRUE)
+  writeLines("---\ntitle: x\n---",
+             file.path(config_root, "dashboard_template", "index.qmd"))
+  writeLines("# render", file.path(config_root, "R", "render.R"))
+  writeLines("# icons",  file.path(config_root, "R", "icons.R"))
+  writeLines("<svg/>",   file.path(config_root, "www", "icons", "quarto.svg"))
+  writeLines("<svg/>",   file.path(config_root, "www", "icons", "shiny.svg"))
+
+  old_wd <- setwd(config_root); on.exit(setwd(old_wd), add = TRUE)
+  staged <- stage_bundle(template_dir = "dashboard_template",
+                         config = list(title = "T"))
+  on.exit(unlink(staged, recursive = TRUE), add = TRUE)
+
+  expect_true(file.exists(file.path(staged, "icons", "quarto.svg")))
+  expect_true(file.exists(file.path(staged, "icons", "shiny.svg")))
+})
