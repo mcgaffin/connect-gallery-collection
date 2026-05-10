@@ -41,6 +41,21 @@ test_that("wizard_modal_dialog footer shows Back + Publish on step 4 (create)", 
   expect_match(html, ">Publish<",           fixed = TRUE)
 })
 
+test_that("wizard footer renders Cancel as a link, ordered Cancel -> Back -> primary", {
+  modal <- wizard_modal_dialog(step = 4, mode = "create",
+                               state = list(), body = shiny::tags$div())
+  html <- as.character(modal)
+  cancel_pos  <- regexpr('id="wizard_cancel"',  html, fixed = TRUE)
+  back_pos    <- regexpr('id="wizard_back"',    html, fixed = TRUE)
+  primary_pos <- regexpr('id="wizard_publish"', html, fixed = TRUE)
+  expect_true(cancel_pos < back_pos)
+  expect_true(back_pos < primary_pos)
+  # Cancel is a link button.
+  expect_match(html,
+    '<button[^>]*btn-link[^>]*id="wizard_cancel"',
+    perl = TRUE)
+})
+
 test_that("wizard_modal_dialog footer says Update on step 4 (edit)", {
   modal <- wizard_modal_dialog(step = 4, mode = "edit",
                                state = list(title = "X"), body = shiny::tags$div())
