@@ -49,11 +49,11 @@ WIZARD_STEP_TITLES <- c("Select content", "Describe", "Theme", "Preview")
                   target = "_blank",
                   class = "text-muted small",
                   "Share feedback ↗"),
-    shiny::tags$div(class = "d-flex gap-2",
+    shiny::tags$div(class = "d-flex gap-2 align-items-center",
+      shiny::actionButton("wizard_cancel", "Cancel",
+                          class = "btn-link btn-compact"),
       if (!is_edit && step > 1) shiny::actionButton("wizard_back", "Back",
                                         class = "btn-outline-secondary btn-compact"),
-      shiny::actionButton("wizard_cancel", "Cancel",
-                          class = "btn-outline-secondary btn-compact"),
       shiny::actionButton(primary_id, primary_label,
                           class = "btn-primary btn-compact")
     )

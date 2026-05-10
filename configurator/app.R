@@ -52,6 +52,7 @@ ui <- page_fillable(
       .modal-body {
         overflow-y: auto;
         flex: 1 1 auto;
+        min-height: 480px;
       }
 
       /* Footer layout: Share feedback far-left, buttons far-right */
@@ -453,6 +454,19 @@ server <- function(input, output, session) {
       search_results(list())
     }
     show_wizard()
+    # show_wizard() rebuilds the modal, which destroys the #search_query
+    # input the user is typing into. Restore focus + cursor-at-end so they
+    # can keep typing without re-clicking the field.
+    shinyjs::runjs(
+      "setTimeout(function () {
+         var el = document.getElementById('search_query');
+         if (el) {
+           el.focus();
+           var n = (el.value || '').length;
+           try { el.setSelectionRange(n, n); } catch (e) {}
+         }
+       }, 0);"
+    )
   }, ignoreInit = TRUE)
 
   # select_all is now an actionButton (counter); toggle select/deselect visible results
