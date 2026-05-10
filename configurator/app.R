@@ -52,6 +52,7 @@ ui <- page_fillable(
       .modal-body {
         overflow-y: auto;
         flex: 1 1 auto;
+        min-height: 480px;
       }
 
       /* Footer layout: Share feedback far-left, buttons far-right */
