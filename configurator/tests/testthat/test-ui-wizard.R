@@ -94,3 +94,27 @@ test_that("wizard_modal_dialog edit-mode footer shows tab clicks even on step 4"
   expect_match(html, 'id="wizard_tab_1"', fixed = TRUE)
   expect_match(html, ">Update<", fixed = TRUE)
 })
+
+test_that("the primary button is disabled when busy=TRUE", {
+  modal <- wizard_modal_dialog(step = 4, mode = "edit",
+                               state = list(title = "X"),
+                               body = shiny::tags$div(),
+                               busy = TRUE)
+  html <- as.character(modal)
+  # Attribute order on the rendered <button> isn't stable, so use
+  # lookaheads to assert both `disabled` and `id="wizard_publish"`
+  # appear inside the same <button ...> tag.
+  expect_match(html,
+    '<button(?=[^>]*disabled)(?=[^>]*id="wizard_publish")[^>]*>',
+    perl = TRUE)
+})
+
+test_that("the primary button is NOT disabled by default", {
+  modal <- wizard_modal_dialog(step = 4, mode = "edit",
+                               state = list(title = "X"),
+                               body = shiny::tags$div())
+  html <- as.character(modal)
+  # htmltools drops attributes whose value is FALSE/NA/NULL, so when
+  # busy defaults to FALSE the `disabled` attribute is absent entirely.
+  expect_no_match(html, "disabled", fixed = TRUE)
+})

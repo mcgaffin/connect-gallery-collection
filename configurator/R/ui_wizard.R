@@ -34,7 +34,7 @@ WIZARD_STEP_TITLES <- c("Select content", "Describe", "Theme", "Preview")
                   do.call(shiny::tagList, tabs))
 }
 
-.wizard_footer <- function(step, mode) {
+.wizard_footer <- function(step, mode, busy = FALSE) {
   is_edit <- identical(mode, "edit")
   primary_label <- if (is_edit) "Update"
                     else if (step < 4) "Next"
@@ -54,13 +54,13 @@ WIZARD_STEP_TITLES <- c("Select content", "Describe", "Theme", "Preview")
                           class = "btn-link btn-compact"),
       if (!is_edit && step > 1) shiny::actionButton("wizard_back", "Back",
                                         class = "btn-outline-secondary btn-compact"),
-      shiny::actionButton(primary_id, primary_label,
+      shiny::actionButton(primary_id, primary_label, disabled = busy,
                           class = "btn-primary btn-compact")
     )
   )
 }
 
-wizard_modal_dialog <- function(step, mode, state, body) {
+wizard_modal_dialog <- function(step, mode, state, body, busy = FALSE) {
   title_text <- if (mode == "edit") {
     paste0("Edit collection: ", state$title %||% "")
   } else {
@@ -80,7 +80,7 @@ wizard_modal_dialog <- function(step, mode, state, body) {
     ),
     nav,
     body,
-    footer = .wizard_footer(step, mode),
+    footer = .wizard_footer(step, mode, busy),
     size = "l",
     easyClose = FALSE,
     fade = FALSE
