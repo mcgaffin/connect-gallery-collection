@@ -205,6 +205,7 @@ server <- function(input, output, session) {
   selected_items   <- reactiveVal(list())             # cache: guid -> item
   collection_meta  <- reactiveVal(list())             # cache: guid -> meta
   meta_queue       <- reactiveVal(character(0))       # guids pending fetch
+  is_publishing    <- reactiveVal(FALSE) 
 
   # Track which per-button observers we've registered so refreshes of
   # collections() / search_results() / selected items don't stack duplicate
@@ -233,6 +234,7 @@ server <- function(input, output, session) {
     wizard_state$source_type    <- "manual"
     wizard_state$guids          <- character(0)
     wizard_state$source_tag     <- ""
+    is_publishing(FALSE)
     search_results(list())
     preview_html("")
     select_subtab("results")
@@ -371,7 +373,8 @@ server <- function(input, output, session) {
     body  <- step_body_for(step)
     showModal(wizard_modal_dialog(step = step, mode = mode,
                                   state = isolate(reactiveValuesToList(wizard_state)),
-                                  body = body))
+                                  body = body,
+                                  busy = is_publishing()))
   }
 
   step_body_for <- function(step) {
@@ -625,6 +628,11 @@ server <- function(input, output, session) {
       }
     }
     # Existing create-flow validation already happened step-by-step.
+    # Flip to publishing AFTER validation so a failed validation doesn't
+    # leave the button disabled. The show_wizard() repaint is what
+    # actually swaps the rendered button to disabled.
+    is_publishing(TRUE)
+    show_wizard()
     cfg <- build_config(
       title          = wizard_state$title,
       description    = wizard_state$description,
@@ -636,7 +644,11 @@ server <- function(input, output, session) {
     )
     staged <- tryCatch(
       stage_bundle("dashboard_template", cfg),
-      error = function(e) { notify(paste("Bundle staging failed:", e$message), "error"); NULL }
+      error = function(e) {
+        notify(paste("Bundle staging failed:", e$message), "error")
+        is_publishing(FALSE); show_wizard()
+        NULL
+      }
     )
     if (is.null(staged)) return()
     handle <- tryCatch(
@@ -645,7 +657,11 @@ server <- function(input, output, session) {
                     app_title = cfg$title,
                     connect_server = connect_server,
                     connect_api_key = connect_api_key),
-      error = function(e) { notify(paste("Deploy launch failed:", e$message), "error"); NULL }
+      error = function(e) {
+        notify(paste("Deploy launch failed:", e$message), "error")
+        is_publishing(FALSE); show_wizard()
+        NULL
+      }
     )
     if (is.null(handle)) return()
     progress_id <- showNotification(
@@ -670,8 +686,11 @@ server <- function(input, output, session) {
       result <- tryCatch(handle$get_result(), error = function(e) e)
       if (inherits(result, "error")) {
         notify(paste("Publish failed:", conditionMessage(result)), "error")
+        is_publishing(FALSE)
+        if (view() == "wizard") show_wizard()
       } else {
         url <- result$url %||% connect_server
+        is_publishing(FALSE)
         showNotification(
           tags$div(tags$p("Your collection is ready!"),
                    tags$a(href = url, target = "_blank",
@@ -698,6 +717,8 @@ server <- function(input, output, session) {
       msg <- if (length(err) > 0) paste(tail(err, 6), collapse = "\n")
              else sprintf("Deploy exited with status %s", handle$get_exit_status())
       notify(paste("Publish failed:\n", msg), "error")
+      is_publishing(FALSE)
+      if (view() == "wizard") show_wizard()
     }
     deploy_handle(NULL); deploy_progress(NULL); staged_dir(NULL)
   })
