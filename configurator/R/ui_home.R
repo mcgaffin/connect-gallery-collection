@@ -51,7 +51,11 @@
   guid  <- coll$guid %||% ""
   title <- coll$title %||% coll$name %||% guid
   date  <- .format_datetime(coll$last_deployed_time)
-  open_url <- paste0(connect_server %||% "", "/content/", guid, "/")
+  # Title links to the Connect dashboard (not the standalone rendered URL)
+  # so the publisher lands somewhere they can adjust metadata, sharing, and
+  # scheduling. Same destination as the post-publish toast's button.
+  base <- sub("/$", "", connect_server %||% "")
+  open_url <- paste0(base, "/connect/#/apps/", guid)
   details <- .home_details_text(meta)
   raw_desc <- if (!is.null(meta) && nzchar(meta$description %||% "")) {
     meta$description

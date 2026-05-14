@@ -708,7 +708,26 @@ server <- function(input, output, session) {
         is_publishing(FALSE)
         if (view() == "wizard") show_wizard()
       } else {
-        url <- result$url %||% connect_server
+        # Link to the Connect dashboard for this content (not the standalone
+        # rendered URL), so the publisher can adjust metadata, sharing, and
+        # scheduling from the post-publish toast.
+        #
+        # rsconnect's deployment record can carry the integer content ID
+        # instead of the GUID, so resolve the GUID explicitly: UPDATE already
+        # has it in editing_guid(); CREATE looks it up by name.
+        guid <- editing_guid()
+        if (is.null(guid)) {
+          if (!is.null(result$name) && nzchar(result$name)) {
+            info <- get_content_by_name(connect_server, key(), result$name)
+            if (!is.null(info) && !is.null(info$guid)) guid <- info$guid
+          }
+        }
+        base <- sub("/$", "", connect_server)
+        url <- if (!is.null(guid) && !is.na(guid) && nzchar(guid)) {
+          paste0(base, "/connect/#/apps/", guid)
+        } else {
+          base
+        }
         is_publishing(FALSE)
         showNotification(
           tags$div(tags$p("Your collection is ready!"),

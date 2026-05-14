@@ -88,6 +88,23 @@ get_content <- function(connect_server, connect_api_key, guid) {
   }, error = function(e) { message("get_content error: ", e$message); NULL })
 }
 
+# Look up a content item by its Connect `name` (the URL-slug-style identifier,
+# not the title). Returns the first match, or NULL. Used after a CREATE
+# deploy when rsconnect's deployment record carries the integer content ID
+# instead of the GUID — the marker-based name we generate is unique enough
+# to resolve the GUID via the v1/content collection endpoint.
+get_content_by_name <- function(connect_server, connect_api_key, name) {
+  tryCatch({
+    resp <- api_request(connect_server, connect_api_key, "/__api__/v1/content") |>
+      httr2::req_url_query(name = name) |>
+      httr2::req_perform()
+    results <- httr2::resp_body_json(resp)
+    if (length(results) > 0) results[[1]] else NULL
+  }, error = function(e) {
+    message("get_content_by_name error: ", e$message); NULL
+  })
+}
+
 # Discovery: list collection dashboards via the marker in `name`.
 # Uses the search endpoint (broad text match) and filters client-side so
 # we only return items where the marker is actually the name prefix.
