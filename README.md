@@ -23,7 +23,19 @@ The Quarto template ships inside the configurator at `configurator/dashboard_tem
 
 Deploy `configurator/` to Connect as a Shiny app. The configurator uses the auto-injected `CONNECT_SERVER` and `CONNECT_API_KEY` environment variables.
 
-### 2. Create or Edit a Collection
+### 2. Attach a Visitor API Key integration
+
+So that each collection is published as the user clicking **Save & Publish** — rather than as the publisher of the Configurator — associate a **Visitor API Key** OAuth integration with the deployed Configurator content. Connect ≥ 2025.01 is required.
+
+1. As a Connect admin, create an OAuth integration of type **Posit Connect API** (Visitor API Key). Pick the maximum role (Viewer / Publisher / Administrator) you want minted keys to carry.
+2. On the deployed Configurator's **Access** sidebar, add the integration.
+3. (Optional) If more than one integration is attached, set the `CONNECT_VISITOR_INTEGRATION_GUID` environment variable on the Configurator content to the GUID of the one to use.
+
+If no integration is attached (e.g. local development), the Configurator falls back to the publisher's `CONNECT_API_KEY` — useful for testing but means publishes will be attributed to the publisher.
+
+See: <https://docs.posit.co/connect/user/oauth-integrations/>.
+
+### 3. Create or Edit a Collection
 
 1. Open the Configurator.
 2. Choose **Create new collection...** (or pick an existing collection from the dropdown).

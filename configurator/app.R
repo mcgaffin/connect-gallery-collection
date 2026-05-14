@@ -221,6 +221,21 @@ server <- function(input, output, session) {
     guids = character(0), source_tag = ""
   )
 
+  # Visitor-scoped API key minted from the Connect Visitor API Key OAuth
+  # integration attached to this content. Cached once per session for
+  # browse/read calls; refresh_key() is called immediately before publish
+  # so the deploy receives a fresh-as-possible key (Connect-minted keys are
+  # ephemeral). When no token header is present, this resolves to the
+  # publisher's CONNECT_API_KEY — see visitor_api_key() in connect_api.R.
+  visitor_key <- NULL
+  refresh_key <- function() {
+    visitor_key <<- visitor_api_key(session, connect_server, connect_api_key)
+    visitor_key
+  }
+  key <- function() {
+    if (is.null(visitor_key)) refresh_key() else visitor_key
+  }
+
   notify <- function(msg, type = "default") {
     showNotification(msg, type = type,
                      duration = if (type == "error") NULL else 5)
@@ -243,10 +258,10 @@ server <- function(input, output, session) {
 
   # ---- initial loads ----
   observe({
-    collections(fetch_my_collections(connect_server, connect_api_key))
+    collections(fetch_my_collections(connect_server, key()))
   })
   observe({
-    all_tags(get_tags(connect_server, connect_api_key))
+    all_tags(get_tags(connect_server, key()))
   })
 
   # ---- home view ----
@@ -280,7 +295,7 @@ server <- function(input, output, session) {
     # Pop first so a re-fire (e.g. from collections() refresh) won't
     # double-process this guid.
     meta_queue(q[-1])
-    bundle <- download_active_bundle(connect_server, connect_api_key, g)
+    bundle <- download_active_bundle(connect_server, key(), g)
     cfg <- if (!is.null(bundle)) extract_collection_json(bundle) else NULL
     parsed <- parse_config(cfg %||% list())
     cache <- collection_meta()
@@ -328,7 +343,7 @@ server <- function(input, output, session) {
       local({
         c_guid <- g
         observeEvent(input[[paste0("copy_", c_guid)]], {
-          info <- get_content(connect_server, connect_api_key, c_guid)
+          info <- get_content(connect_server, key(), c_guid)
           url <- share_url(connect_server, info %||% list(guid = c_guid))
           session$sendCustomMessage("clg_copy", url)
           notify("Link copied to clipboard.", "message")
@@ -338,8 +353,8 @@ server <- function(input, output, session) {
   })
 
   load_existing <- function(guid) {
-    info <- get_content(connect_server, connect_api_key, guid)
-    bundle_path <- download_active_bundle(connect_server, connect_api_key, guid)
+    info <- get_content(connect_server, key(), guid)
+    bundle_path <- download_active_bundle(connect_server, key(), guid)
     cfg <- if (!is.null(bundle_path)) extract_collection_json(bundle_path) else NULL
 
     if (is.null(cfg)) {
@@ -422,7 +437,7 @@ server <- function(input, output, session) {
     missing <- setdiff(wizard_state$guids, names(cache))
     if (length(missing) > 0) {
       for (g in missing) {
-        item <- get_content(connect_server, connect_api_key, g)
+        item <- get_content(connect_server, key(), g)
         if (!is.null(item)) cache[[g]] <- item
       }
       selected_items(cache)
@@ -452,7 +467,7 @@ server <- function(input, output, session) {
   observeEvent(debounced_search_query(), {
     q <- debounced_search_query()
     if (!is.null(q) && nchar(trimws(q)) > 0) {
-      search_results(search_content(connect_server, connect_api_key, q))
+      search_results(search_content(connect_server, key(), q))
     } else {
       search_results(list())
     }
@@ -536,7 +551,7 @@ server <- function(input, output, session) {
   observeEvent(input$wizard_cancel, {
     removeModal()
     view("home")
-    collections(fetch_my_collections(connect_server, connect_api_key))
+    collections(fetch_my_collections(connect_server, key()))
   })
 
   observeEvent(input$wizard_back, {
@@ -601,9 +616,9 @@ server <- function(input, output, session) {
     s <- reactiveValuesToList(wizard_state)
     preview_busy(TRUE)
     items <- if (identical(s$source_type, "tag") && nzchar(s$source_tag)) {
-      fetch_content_by_tag(connect_server, connect_api_key, s$source_tag)
+      fetch_content_by_tag(connect_server, key(), s$source_tag)
     } else {
-      lapply(s$guids, function(g) get_content(connect_server, connect_api_key, g))
+      lapply(s$guids, function(g) get_content(connect_server, key(), g))
     }
     items <- Filter(Negate(is.null), items)
     preview_html(build_collection_html(s, items, THEME_COLORS,
@@ -651,12 +666,16 @@ server <- function(input, output, session) {
       }
     )
     if (is.null(staged)) return()
+    # Refresh the visitor key right before launching so the callr child gets
+    # the freshest-possible key; visitor-minted keys are short-lived and the
+    # deploy can run for minutes.
+    deploy_key <- refresh_key()
     handle <- tryCatch(
       launch_deploy(staged_dir = staged,
                     app_id = editing_guid(),
                     app_title = cfg$title,
                     connect_server = connect_server,
-                    connect_api_key = connect_api_key),
+                    connect_api_key = deploy_key),
       error = function(e) {
         notify(paste("Deploy launch failed:", e$message), "error")
         is_publishing(FALSE); show_wizard()
@@ -710,7 +729,7 @@ server <- function(input, output, session) {
           cache[[eg]] <- NULL
           collection_meta(cache)
         }
-        collections(fetch_my_collections(connect_server, connect_api_key))
+        collections(fetch_my_collections(connect_server, key()))
       }
     } else {
       err <- tryCatch(handle$read_error_lines(), error = function(e) character(0))
