@@ -19,10 +19,10 @@ step_describe_ui <- function(state) {
       ),
       shiny::tags$div(class = "mb-3",
         shiny::textAreaInput("collection_intro",
-                             "Introduction (Markdown)",
+                             "Introduction",
                              value = state$intro_markdown %||% "",
                              rows = 5,
-                             placeholder = "Write an intro. Markdown supported.",
+                             placeholder = "Write an intro. Markdown is supported.",
                              width = "100%"),
         shiny::tags$div(class = "form-text",
           "Markdown supported (headings, lists, links). Appears in a panel above the items.")

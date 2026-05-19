@@ -1,6 +1,51 @@
 # Connect API helpers. All functions take connect_server / connect_api_key as
 # explicit arguments so they're easy to test or stub.
 
+# Returns an API key scoped to the visitor making the current Shiny request,
+# minted via `connectapi::connect()`'s OAuth token exchange. Requires that a
+# "Posit Connect API" (Visitor API Key) OAuth integration is associated with
+# the deployed Configurator content — see README.
+#
+# Falls back to `fallback_api_key` (the publisher's CONNECT_API_KEY) when no
+# user-session-token is present (running locally, or no integration attached)
+# or when the exchange fails. The publisher key keeps local development and
+# any non-session code path working.
+#
+# Mint per-action rather than once per session: Connect-minted visitor keys
+# are short-lived, so caching at session start would break long-lived
+# Shiny sessions. The caller can layer its own session-scoped cache if the
+# extra HTTP cost matters.
+visitor_api_key <- function(session, connect_server, fallback_api_key) {
+  token <- if (!is.null(session)) {
+    session$request$HTTP_POSIT_CONNECT_USER_SESSION_TOKEN
+  } else {
+    NULL
+  }
+  if (is.null(token) || !nzchar(token)) {
+    return(fallback_api_key)
+  }
+
+  audience <- Sys.getenv("CONNECT_VISITOR_INTEGRATION_GUID", "")
+  audience <- if (nzchar(audience)) audience else NULL
+
+  tryCatch({
+    client <- connectapi::connect(
+      server          = connect_server,
+      api_key         = fallback_api_key,
+      token           = token,
+      audience        = audience,
+      .check_is_fatal = FALSE
+    )
+    client$api_key
+  }, error = function(e) {
+    warning(sprintf(
+      "visitor_api_key: token exchange failed (%s); using publisher key.",
+      conditionMessage(e)
+    ))
+    fallback_api_key
+  })
+}
+
 api_request <- function(connect_server, connect_api_key, path) {
   req <- httr2::request(paste0(connect_server, path))
   if (nzchar(connect_api_key)) {
@@ -41,6 +86,23 @@ get_content <- function(connect_server, connect_api_key, guid) {
       httr2::req_perform()
     httr2::resp_body_json(resp)
   }, error = function(e) { message("get_content error: ", e$message); NULL })
+}
+
+# Look up a content item by its Connect `name` (the URL-slug-style identifier,
+# not the title). Returns the first match, or NULL. Used after a CREATE
+# deploy when rsconnect's deployment record carries the integer content ID
+# instead of the GUID — the marker-based name we generate is unique enough
+# to resolve the GUID via the v1/content collection endpoint.
+get_content_by_name <- function(connect_server, connect_api_key, name) {
+  tryCatch({
+    resp <- api_request(connect_server, connect_api_key, "/__api__/v1/content") |>
+      httr2::req_url_query(name = name) |>
+      httr2::req_perform()
+    results <- httr2::resp_body_json(resp)
+    if (length(results) > 0) results[[1]] else NULL
+  }, error = function(e) {
+    message("get_content_by_name error: ", e$message); NULL
+  })
 }
 
 # Discovery: list collection dashboards via the marker in `name`.
